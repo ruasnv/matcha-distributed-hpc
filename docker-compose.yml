@@ -1,0 +1,56 @@
+# ... (omitting version: '3.8' due to warning)
+
+services:
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    # Map host port 8000 to internal container port 5000
+    ports:
+      - "8000:5000" 
+    
+    volumes:
+      - ./instance:/app/instance
+    
+    # Inject all environment variables here:
+    environment:
+      # Flask variables (FLASK_APP is crucial for Flask to run app.py)
+      - FLASK_APP=app.py
+      - FLASK_ENV=development # Enables debug mode
+      - SECRET_KEY=a_very_secret_key_that_you_should_change_for_production
+      
+      # Custom API Keys
+      - ORCHESTRATOR_API_KEY_PROVIDERS=supersecretproviderkey123
+      - ORCHESTRATOR_API_KEY_CONSUMERS=ultrasecretconsumerkey456
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+
+  provider:
+    build:
+      context: ./provider_agent
+      dockerfile: Dockerfile
+    
+    volumes: 
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Deploy section for GPU access (assuming NVIDIA runtime is installed on host)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+              
+    environment:
+      - PYTHONUNBUFFERED=1 # <-- Add this line
+      - PROVIDER_ID=matcha_gpu_node_1
+      - HEARTBEAT_INTERVAL_SECONDS=5
+      - ORCHESTRATOR_URL=http://orchestrator:5000
+      - API_KEY=supersecretproviderkey123

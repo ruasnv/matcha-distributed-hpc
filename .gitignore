@@ -1,0 +1,19 @@
+notes.txt
+# Python Virtual Environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Flask/SQLAlchemy instance folder
+instance/
+
+# IDE and editor folders
+.vscode/
+.idea/

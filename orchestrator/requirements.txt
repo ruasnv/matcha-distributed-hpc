@@ -1,0 +1,4 @@
+Flask
+python-dotenv
+requests
+jsonpickle # New: for serializing/deserializing data

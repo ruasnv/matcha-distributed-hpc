@@ -1,0 +1,4 @@
+requests
+nvidia-ml-py # The pynvml library
+Flask
+docker
