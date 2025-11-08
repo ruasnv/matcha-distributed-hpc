@@ -1,10 +1,11 @@
-services:
-  # 1. The PostgreSQL Database
-  - type: psql
-    name: matcha-database
+# A top-level list for all databases
+databases:
+  - name: matcha-database
     plan: free # Use the free tier
 
-  # 2. The Orchestrator Web Service
+# A separate top-level list for all other services
+services:
+  # The Orchestrator Web Service
   - type: web
     name: matcha-orchestrator
     plan: free # Use the free tier
@@ -21,13 +22,13 @@ services:
         
       # === THIS IS THE CORRECTED BLOCK ===
       - key: DATABASE_URL
-        fromService:
-          name: matcha-database  # We removed "type: psql" from here
+        fromDatabase: # Use fromDatabase for Postgres
+          name: matcha-database
           property: connectionString
       # === END OF CORRECTED BLOCK ===
           
       # Set your secret keys (you can set these as "Secret Files" in Render's dashboard)
-      - key: ORCHESTRATOR_API_KEY_PROVIDERS # <-- Fixed typo here
+      - key: ORCHESTRATOR_API_KEY_PROVIDERS
         value: "your-secret-provider-key" 
       - key: ORCHESTRATOR_API_KEY_CONSUMERS
         value: "your-secret-consumer-key"
