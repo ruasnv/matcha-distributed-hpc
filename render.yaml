@@ -1,0 +1,33 @@
+services:
+  # 1. The PostgreSQL Database
+  - type: psql
+    name: matcha-database
+    plan: free # Use the free tier
+    
+
+  # 2. The Orchestrator Web Service
+  - type: web
+    name: matcha-orchestrator
+    plan: free # Use the free tier
+    # Tell Render to use the Dockerfile in the orchestrator directory
+    dockerfilePath: ./orchestrator/Dockerfile
+    # Tell Render which command to run to start the server
+    # We use Gunicorn, a production-ready Python server
+    startCommand: "gunicorn -w 4 -b 0.0.0.0:5000 'app:create_app()'"
+    # Set the environment variables
+    envVars:
+      # This tells Python to run our Gunicorn command
+      - key: PYTHON_COMMAND
+        value: "gunicorn -w 4 -b 0.0.0.0:5000 'app:create_app()'"
+      # This connects our app to the free database we just created
+      - key: DATABASE_URL
+        from: psql # Get the URL from the 'matcha-database' service
+        name: matcha-database
+        property: connectionString
+      # Set your secret keys (you can set these as "Secret Files" in Render's dashboard)
+      - key: ORCHESTRATOR_API_KEY_PROVIDERS
+        value: "your-secret-provider-key" # IMPORTANT: Set this in the dashboard, not here
+      - key: ORCHESTRATOR_API_KEY_CONSUMERS
+        value: "your-secret-consumer-key" # IMPORTANT: Set this in the dashboard
+      - key: SECRET_KEY
+        value: "a-very-secret-key"
