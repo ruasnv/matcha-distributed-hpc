@@ -3,9 +3,12 @@ FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
+# --- FIX ---
+# Copy the requirements file from its sub-folder
+COPY orchestrator/requirements.txt .
+
 # We need gunicorn for the production server
 # Make sure gunicorn is in requirements.txt
-COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Final runtime image
@@ -20,11 +23,11 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy the actual application code
-COPY . /app
+# --- FIX ---
+# Copy the actual application code from the sub-folder
+COPY orchestrator/ .
 
 EXPOSE 5000
 
-# --- THIS IS THE KEY CHANGE ---
 # Use Gunicorn as the production-ready start command
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:create_app()"]
