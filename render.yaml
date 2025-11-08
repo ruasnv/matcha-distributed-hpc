@@ -9,24 +9,19 @@ services:
   - type: web
     name: matcha-orchestrator
     plan: free # Use the free tier
-    runtime: docker # <-- THIS IS THE FIX
-    # Tell Render to use the Dockerfile in the orchestrator directory
+    runtime: docker # Tell Render to use Docker
+    # Tell Render where the Dockerfile is
     dockerfilePath: ./orchestrator/Dockerfile
-    # Tell Render which command to run to start the server
-    # We use Gunicorn, a production-ready Python server
-    startCommand: "gunicorn -w 4 -b 0.0.0.0:5000 'app:create_app()'"
+    
+    # --- WE REMOVED startCommand and PYTHON_COMMAND ---
+    # The start command now comes from the CMD in the Dockerfile
+    
     # Set the environment variables
     envVars:
-      # This tells Python to run our Gunicorn command
-      - key: PYTHON_COMMAND
-        value: "gunicorn -w 4 -b 0.0.0.0:5000 'app:create_app()'"
-        
-      # === THIS IS THE CORRECTED BLOCK ===
       - key: DATABASE_URL
-        fromDatabase: # Use fromDatabase for Postgres
+        fromDatabase:
           name: matcha-database
           property: connectionString
-      # === END OF CORRECTED BLOCK ===
           
       # Set your secret keys (you can set these as "Secret Files" in Render's dashboard)
       - key: ORCHESTRATOR_API_KEY_PROVIDERS

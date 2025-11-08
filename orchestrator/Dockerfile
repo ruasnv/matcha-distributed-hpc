@@ -1,16 +1,12 @@
 # Stage 1: Build dependencies
 FROM python:3.10-slim AS builder
 
-# Set the working directory
 WORKDIR /app
 
-# Copy only the requirements file first to take advantage of Docker caching
+# We need gunicorn for the production server
+# Make sure gunicorn is in requirements.txt
 COPY requirements.txt .
-
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# -----------------------------------------------------------
 
 # Stage 2: Final runtime image
 FROM python:3.10-slim
@@ -18,7 +14,6 @@ FROM python:3.10-slim
 # Install curl so the healthcheck can work
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
 WORKDIR /app
 
 # Copy installed packages from the builder stage
@@ -28,8 +23,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy the actual application code
 COPY . /app
 
-# The orchestrator is running Flask on port 5000 internally
 EXPOSE 5000
 
-# Command to run the Orchestrator service
-CMD ["python", "app.py"]
+# --- THIS IS THE KEY CHANGE ---
+# Use Gunicorn as the production-ready start command
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:create_app()"]
