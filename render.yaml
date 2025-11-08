@@ -9,6 +9,7 @@ services:
   - type: web
     name: matcha-orchestrator
     plan: free # Use the free tier
+    runtime: docker # <-- THIS IS THE FIX
     # Tell Render to use the Dockerfile in the orchestrator directory
     dockerfilePath: ./orchestrator/Dockerfile
     # Tell Render which command to run to start the server
