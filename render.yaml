@@ -3,7 +3,7 @@ services:
   - type: psql
     name: matcha-database
     plan: free # Use the free tier
-    
+
 
   # 2. The Orchestrator Web Service
   - type: web
@@ -21,9 +21,10 @@ services:
         value: "gunicorn -w 4 -b 0.0.0.0:5000 'app:create_app()'"
       # This connects our app to the free database we just created
       - key: DATABASE_URL
-        from: psql # Get the URL from the 'matcha-database' service
-        name: matcha-database
-        property: connectionString
+        fromService:
+          type: psql # Get the URL from the 'matcha-database' service
+          name: matcha-database
+          property: connectionString
       # Set your secret keys (you can set these as "Secret Files" in Render's dashboard)
       - key: ORCHESTRATOR_API_KEY_PROVIDERS
         value: "your-secret-provider-key" # IMPORTANT: Set this in the dashboard, not here
