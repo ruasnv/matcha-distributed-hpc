@@ -5,3 +5,4 @@ jsonpickle
 click
 gunicorn
 psycopg2-binary
+Flask-SQLAlchemy
