@@ -1,0 +1,26 @@
+The New "Provider" Workflow
+This is the magic. Now, to add a new provider (your laptop, your friend's PC, a lab computer), all you have to do is make sure that machine has Docker and the NVIDIA drivers, and then run one single command:
+
+Bash
+
+docker run --rm --gpus all \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e ORCHESTRATOR_URL="httpsS://matcha-orchestrator.onrender.com" \
+  -e API_KEY="your-secret-provider-key" \
+  -e PROVIDER_ID="ruya-rtx-5070-laptop" \
+  ruya/matcha-provider:latest
+Let's break that down:
+
+--gpus all: Gives the agent access to the GPU.
+
+-v /var/run/docker.sock...: Gives the agent permission to run Docker tasks (the "Docker-in-Docker" trick).
+
+-e ORCHESTRATOR_URL=...: Tells the agent the public URL of your deployed brain.
+
+-e API_KEY=...: The secret key you set in your Render dashboard.
+
+-e PROVIDER_ID=...: A unique name for this new provider.
+
+ruya/matcha-provider:latest: The public image you just uploaded.
+
+And that's it! Your provider agent will start, connect to the public orchestrator, register its "RTX 5070", and wait for jobs.

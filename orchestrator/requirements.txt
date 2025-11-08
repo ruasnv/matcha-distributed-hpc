@@ -1,6 +1,7 @@
-Flask
+flask
 python-dotenv
 requests
 jsonpickle
 click
 gunicorn
+psycopg2-binary
