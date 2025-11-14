@@ -42,7 +42,7 @@ def get_gpu_info():
         device_count = nvmlDeviceGetCount()
         for i in range(device_count):
             handle = nvmlDeviceGetHandleByIndex(i)
-            name = nvmlDeviceGetName(handle).decode('utf-8')
+            name = nvmlDeviceGetName(handle)
             memory_info = nvmlDeviceGetMemoryInfo(handle)
             gpus_data.append({
                 "id": f"gpu_{i}",
