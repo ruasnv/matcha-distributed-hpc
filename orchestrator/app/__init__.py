@@ -32,7 +32,10 @@ def create_app():
     # Basic API Key Authentication Middleware (for MVP)
     @app.before_request
     def check_api_key():
-        # Exclude specific routes from API key check
+        if request.method == 'OPTIONS':
+                return
+
+            # Exclude specific routes from API key check
         if request.endpoint and (
             request.endpoint.startswith('static') or
             request.endpoint == 'api.health_check' or
