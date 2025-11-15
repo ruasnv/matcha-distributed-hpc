@@ -29,3 +29,9 @@ class Task(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     stdout = db.Column(db.Text, nullable=True)
     stderr = db.Column(db.Text, nullable=True)
+    input_path = db.Column(db.String, nullable=True)
+    output_path = db.Column(db.String, nullable=True)
+    script_path = db.Column(db.String, nullable=True)
+    # We'll store secrets (like AWS/R2 keys) in an encrypted JSON string
+    env_vars = db.Column(db.Text, nullable=True)
+    

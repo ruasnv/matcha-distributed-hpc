@@ -114,7 +114,13 @@ def consumer_submit_task():
         docker_image=docker_image,
         gpu_requirements=jsonpickle.encode(data.get('gpu_requirements', {})),
         status='QUEUED', # Task is now just queued
-        submission_time=datetime.utcnow()
+        submission_time=datetime.utcnow(),
+        # --- ADD THESE NEW FIELDS ---
+        input_path=data.get('input_path'),
+        output_path=data.get('output_path'),
+        script_path=data.get('script_path'),
+        # We'll just pass the env_vars dict as a JSON string
+        env_vars=json.dumps(data.get('env_vars', {})) 
     )
     
     try:
@@ -204,7 +210,13 @@ def provider_get_task():
             "task": {
                 "task_id": task.id,
                 "docker_image": task.docker_image,
-                "gpu_id": idle_gpu['id']
+                "gpu_id": idle_gpu['id'],
+
+                # --- ADD THESE NEW FIELDS ---
+                "input_path": task.input_path,
+                "output_path": task.output_path,
+                "script_path": task.script_path,
+                "env_vars": json.loads(task.env_vars) if task.env_vars else {}
             },
             "message": "Task assigned."
         }), 200

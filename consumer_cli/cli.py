@@ -20,12 +20,23 @@ def submit_task(docker_image):
     url = f"{ORCHESTRATOR_URL}/consumer/submit_task"
     headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
     
+    # Parse env_vars from "KEY=VALUE,KEY2=VALUE2"
+    env_dict = {}
+    if env_vars:
+        for item in env_vars.split(','):
+            key, value = item.split('=', 1)
+            env_dict[key] = value
+
     payload = {
         "docker_image": docker_image,
-        # Add any other submission data needed (e.g., resources, priority)
+        "input_path": input_path,
+        "output_path": output_path,
+        "script_path": script_path,
+        "env_vars": env_dict
     }
 
-    print(f"Submitting task for image '{docker_image}' to {url}...")
+    print(f"Submitting ML task for image '{docker_image}' to {url}...")
+
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
@@ -79,8 +90,12 @@ def main():
 
     # Submitter command
     parser_submit = subparsers.add_parser('submit', help="Submit a new Docker image task.")
-    parser_submit.add_argument('--docker-image', required=True, help="The Docker image name to execute (e.g., python:3.10-slim).")
-
+    parser_submit.add_argument('--image', required=True, help="The Docker image to execute (e.g., pytorch/pytorch).")
+    parser_submit.add_argument('--input-path', help="S3/R2 path to input data (e.g., r2://my-bucket/dataset.zip)")
+    parser_submit.add_argument('--output-path', help="S3/R2 path to upload results to (e.g., r2://my-bucket/results/)")
+    parser_submit.add_argument('--script-path', help="S3/R2 path to the main script to run (e.g., r2://my-bucket/train.py)")
+    parser_submit.add_argument('--env', help="Comma-separated env vars for the task (e.g., 'KEY=VALUE,KEY2=VALUE2')")
+    
     # Status command
     parser_status = subparsers.add_parser('status', help="Check the status of a submitted task.")
     parser_status.add_argument('--task-id', required=True, help="The ID of the task to check.")
@@ -88,7 +103,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == 'submit':
-        submit_task(args.docker_image)
+        submit_task(args.image, args.input_path, args.output_path, args.script_path, args.env)
     elif args.command == 'status':
         get_task_status(args.task_id)
 

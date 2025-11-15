@@ -4,6 +4,8 @@ import json
 import threading
 import subprocess
 import os
+import tempfile
+import shutil
 
 # --- NVML (GPU Detection) ---
 try:
@@ -42,7 +44,7 @@ def get_gpu_info():
         device_count = nvmlDeviceGetCount()
         for i in range(device_count):
             handle = nvmlDeviceGetHandleByIndex(i)
-            name = nvmlDeviceGetName(handle)
+            name = nvmlDeviceGetName(handle).decode('utf-8') # Added decode for safety
             memory_info = nvmlDeviceGetMemoryInfo(handle)
             gpus_data.append({
                 "id": f"gpu_{i}",
@@ -113,38 +115,133 @@ def get_task_from_orchestrator():
 
 # --- Task Execution ---
 
-def execute_docker_task(task_id, docker_image, gpu_id):
-    print(f"[{task_id}] Starting task. Image: {docker_image} on GPU: {gpu_id}")
-    
-    # Report RUNNING immediately
-    report_task_status(task_id, "RUNNING")
-    
-    gpu_argument = "--gpus all" if NVML_AVAILABLE and "gpu" in gpu_id else ""
-    docker_command = f"docker run --rm {gpu_argument} {docker_image}"
-    print(f"[{task_id}] Executing: {docker_command}")
-    
+# (The OLD execute_docker_task function that was here is NOW DELETED)
+
+def run_subprocess(command, task_id, env_vars=None):
+    """Helper function to run a shell command and stream its logs."""
+    print(f"[{task_id}] Running command: {command}")
+
+    # Combine current env with task-specific env_vars
+    process_env = os.environ.copy()
+    if env_vars:
+        process_env.update(env_vars)
+
+    process = subprocess.Popen(
+        command, 
+        shell=True, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.STDOUT, 
+        text=True, 
+        env=process_env
+    )
+
+    output_log = []
+    for line in process.stdout:
+        print(f"[{task_id}] > {line.strip()}")
+        output_log.append(line)
+
+    process.wait()
+    return process.returncode, "".join(output_log)
+
+def execute_docker_task(task):
+    """
+    The new 3-stage task runner: Download, Compute, Upload.
+    """
+    task_id = task['task_id']
+    print(f"[{task_id}] Starting task...")
+
+    # Create a unique temporary directory for this job
+    temp_dir = tempfile.mkdtemp(prefix=f"matcha_job_{task_id}_")
+    print(f"[{task_id}] Created temp workspace: {temp_dir}")
+
+    # Get S3/R2 credentials. Use your Cloudflare Endpoint URL here!
+    # We pass these as env vars to the aws-cli container.
+    s3_env_vars = task['env_vars']
+    # !!! IMPORTANT: YOU MUST REPLACE THIS DUMMY URL !!!
+    s3_endpoint_url = os.getenv("R2_ENDPOINT_URL", "https://0ad5918c8348ef6bec32eff5f6f17029.r2.cloudflarestorage.com")
+
+    # We build the 'aws' command to run inside a Docker container
+    # We must pass the AWS credentials securely as environment variables
+    aws_cli_cmd_base = (
+        f"docker run --rm "
+        f"-e AWS_ACCESS_KEY_ID=\"{s3_env_vars.get('AWS_ACCESS_KEY_ID')}\" "
+        f"-e AWS_SECRET_ACCESS_KEY=\"{s3_env_vars.get('AWS_SECRET_ACCESS_KEY')}\" "
+        f"-v \"{temp_dir}\":/workspace " # Mount temp dir
+        f"amazon/aws-cli:latest --endpoint-url {s3_endpoint_url}"
+    )
+
+    full_stdout = ""
+    full_stderr = ""
+    script_name = "script.py" # Default script name
+
     try:
-        result = subprocess.run(
-            docker_command,
-            shell=True, 
-            capture_output=True,
-            text=True,
-            check=True
+        # --- STAGE 1: DOWNLOAD ---
+        report_task_status(task_id, "DOWNLOADING")
+
+        # Download the main script
+        if task.get('script_path'):
+            script_name = os.path.basename(task['script_path'])
+            script_cmd = f"{aws_cli_cmd_base} s3 cp \"{task['script_path']}\" /workspace/{script_name}"
+            return_code, log = run_subprocess(script_cmd, task_id)
+            full_stdout += f"[DOWNLOAD SCRIPT LOG]\n{log}\n"
+            if return_code != 0:
+                raise Exception(f"Failed to download script: {log}")
+
+        # Download the main input data
+        if task.get('input_path'):
+            input_name = os.path.basename(task['input_path'])
+            input_cmd = f"{aws_cli_cmd_base} s3 cp \"{task['input_path']}\" /workspace/{input_name}"
+            return_code, log = run_subprocess(input_cmd, task_id)
+            full_stdout += f"[DOWNLOAD INPUT LOG]\n{log}\n"
+            if return_code != 0:
+                raise Exception(f"Failed to download input data: {log}")
+
+        # --- STAGE 2: COMPUTE ---
+        report_task_status(task_id, "RUNNING")
+
+        gpu_argument = "--gpus all" if "gpu" in task['gpu_id'] else ""
+        # Pass S3/R2 env vars to the main task container as well
+        env_vars_string = " ".join([f"-e {key}=\"{value}\"" for key, value in s3_env_vars.items()])
+        
+        main_docker_cmd = (
+            f"docker run --rm {gpu_argument} "
+            f"{env_vars_string} "
+            f"-v \"{temp_dir}\":/workspace " # Mount temp dir
+            f"{task['docker_image']} "
+            f"/bin/sh -c 'cd /workspace && python3 {script_name}'" # Run the script
         )
-        print(f"[{task_id}] Task completed. Stdout: {result.stdout[:200]}...")
-        report_task_status(task_id, "COMPLETED", {
-            "stdout": result.stdout,
-            "stderr": result.stderr
-        })
-    except subprocess.CalledProcessError as e:
-        print(f"[{task_id}] Task FAILED. Stderr: {e.stderr[:500]}...")
-        report_task_status(task_id, "FAILED", {
-            "stdout": e.stdout,
-            "stderr": e.stderr
-        })
+        
+        return_code, log = run_subprocess(main_docker_cmd, task_id) # No need to pass s3_env_vars here, it's in the string
+        full_stdout += f"[COMPUTE LOG]\n{log}\n"
+        if return_code != 0:
+            raise Exception(f"Compute task failed: {log}")
+
+        # --- STAGE 3: UPLOAD ---
+        report_task_status(task_id, "UPLOADING")
+        if task.get('output_path'):
+            # Upload everything in the workspace folder to the output path
+            upload_cmd = f"{aws_cli_cmd_base} s3 cp /workspace/ \"{task['output_path']}\" --recursive"
+            return_code, log = run_subprocess(upload_cmd, task_id)
+            full_stdout += f"[UPLOAD LOG]\n{log}\n"
+            if return_code != 0:
+                raise Exception(f"Failed to upload results: {log}")
+
+        # --- STAGE 4: COMPLETE ---
+        print(f"[{task_id}] Task completed successfully.")
+        report_task_status(task_id, "COMPLETED", {"stdout": full_stdout})
+
     except Exception as e:
-        print(f"[{task_id}] Task FAILED (Unexpected error): {e}")
-        report_task_status(task_id, "FAILED", {"stderr": str(e)})
+        print(f"[{task_id}] Task FAILED: {e}")
+        full_stderr = str(e)
+        report_task_status(task_id, "FAILED", {"stdout": full_stdout, "stderr": full_stderr})
+
+    finally:
+        # --- STAGE 5: CLEANUP ---
+        try:
+            shutil.rmtree(temp_dir)
+            print(f"[{task_id}] Cleaned up temp workspace: {temp_dir}")
+        except Exception as e:
+            print(f"[{task_id}] ERROR: Failed to clean up temp dir {temp_dir}: {e}")
 
 # --- Main Worker Loop ---
 
@@ -169,7 +266,7 @@ def main():
                 # Run the task in a new thread to not block the main loop
                 threading.Thread(
                     target=execute_docker_task,
-                    args=(task['task_id'], task['docker_image'], task['gpu_id'])
+                    args=(task,) # Pass the whole task dictionary
                 ).start()
             
             # Wait for the next poll
