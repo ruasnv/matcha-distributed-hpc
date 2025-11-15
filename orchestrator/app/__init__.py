@@ -3,12 +3,13 @@ import click
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from .models import db, Provider, Task # Import db and models
+from flask_cors import CORS
 
 load_dotenv() 
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
-
+    CORS(app)  # Enable CORS for all routes
     # Load config from environment variables
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY'),
