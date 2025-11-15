@@ -154,14 +154,11 @@ def execute_docker_task(task):
     temp_dir = tempfile.mkdtemp(prefix=f"matcha_job_{task_id}_")
     print(f"[{task_id}] Created temp workspace: {temp_dir}")
 
-    # Get S3/R2 credentials. Use your Cloudflare Endpoint URL here!
-    # We pass these as env vars to the aws-cli container.
     s3_env_vars = task['env_vars']
     # !!! IMPORTANT: YOU MUST REPLACE THIS DUMMY URL !!!
-    s3_endpoint_url = os.getenv("R2_ENDPOINT_URL", "https://0ad5918c8348ef6bec32eff5f6f17029.r2.cloudflarestorage.com")
+    s3_endpoint_url = os.getenv("R2_ENDPOINT_URL", "https://0ad5918c8348ef6bec32eff5f6f17029.r2.cloudflarestorage.com") # Use your real URL
 
     # We build the 'aws' command to run inside a Docker container
-    # We must pass the AWS credentials securely as environment variables
     aws_cli_cmd_base = (
         f"docker run --rm "
         f"-e AWS_ACCESS_KEY_ID=\"{s3_env_vars.get('AWS_ACCESS_KEY_ID')}\" "
@@ -178,19 +175,25 @@ def execute_docker_task(task):
         # --- STAGE 1: DOWNLOAD ---
         report_task_status(task_id, "DOWNLOADING")
 
+        # --- FIX: Replace r2:// with s3:// ---
+        s3_script_path = task.get('script_path', '').replace('r2://', 's3://')
+        s3_input_path = task.get('input_path', '').replace('r2://', 's3://')
+
         # Download the main script
-        if task.get('script_path'):
-            script_name = os.path.basename(task['script_path'])
-            script_cmd = f"{aws_cli_cmd_base} s3 cp \"{task['script_path']}\" /workspace/{script_name}"
+        if s3_script_path:
+            script_name = os.path.basename(s3_script_path)
+            # Use the corrected s3_script_path
+            script_cmd = f"{aws_cli_cmd_base} s3 cp \"{s3_script_path}\" /workspace/{script_name}"
             return_code, log = run_subprocess(script_cmd, task_id)
             full_stdout += f"[DOWNLOAD SCRIPT LOG]\n{log}\n"
             if return_code != 0:
                 raise Exception(f"Failed to download script: {log}")
 
         # Download the main input data
-        if task.get('input_path'):
-            input_name = os.path.basename(task['input_path'])
-            input_cmd = f"{aws_cli_cmd_base} s3 cp \"{task['input_path']}\" /workspace/{input_name}"
+        if s3_input_path:
+            input_name = os.path.basename(s3_input_path)
+            # Use the corrected s3_input_path
+            input_cmd = f"{aws_cli_cmd_base} s3 cp \"{s3_input_path}\" /workspace/{input_name}"
             return_code, log = run_subprocess(input_cmd, task_id)
             full_stdout += f"[DOWNLOAD INPUT LOG]\n{log}\n"
             if return_code != 0:
@@ -200,7 +203,6 @@ def execute_docker_task(task):
         report_task_status(task_id, "RUNNING")
 
         gpu_argument = "--gpus all" if "gpu" in task['gpu_id'] else ""
-        # Pass S3/R2 env vars to the main task container as well
         env_vars_string = " ".join([f"-e {key}=\"{value}\"" for key, value in s3_env_vars.items()])
         
         main_docker_cmd = (
@@ -211,16 +213,20 @@ def execute_docker_task(task):
             f"/bin/sh -c 'cd /workspace && python3 {script_name}'" # Run the script
         )
         
-        return_code, log = run_subprocess(main_docker_cmd, task_id) # No need to pass s3_env_vars here, it's in the string
+        return_code, log = run_subprocess(main_docker_cmd, task_id)
         full_stdout += f"[COMPUTE LOG]\n{log}\n"
         if return_code != 0:
             raise Exception(f"Compute task failed: {log}")
 
         # --- STAGE 3: UPLOAD ---
         report_task_status(task_id, "UPLOADING")
-        if task.get('output_path'):
+        # --- FIX: Replace r2:// with s3:// ---
+        s3_output_path = task.get('output_path', '').replace('r2://', 's3://')
+
+        if s3_output_path:
             # Upload everything in the workspace folder to the output path
-            upload_cmd = f"{aws_cli_cmd_base} s3 cp /workspace/ \"{task['output_path']}\" --recursive"
+            # Use the corrected s3_output_path
+            upload_cmd = f"{aws_cli_cmd_base} s3 cp /workspace/ \"{s3_output_path}\" --recursive"
             return_code, log = run_subprocess(upload_cmd, task_id)
             full_stdout += f"[UPLOAD LOG]\n{log}\n"
             if return_code != 0:
@@ -242,7 +248,6 @@ def execute_docker_task(task):
             print(f"[{task_id}] Cleaned up temp workspace: {temp_dir}")
         except Exception as e:
             print(f"[{task_id}] ERROR: Failed to clean up temp dir {temp_dir}: {e}")
-
 # --- Main Worker Loop ---
 
 def main():
