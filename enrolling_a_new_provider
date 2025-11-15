@@ -5,10 +5,14 @@ Bash
 
 docker run --rm --gpus all \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -e ORCHESTRATOR_URL="httpsS://matcha-orchestrator.onrender.com" \
+  -e PYTHONUNBUFFERED=1 \  # <-- ADD THIS LINE
+  -e ORCHESTRATOR_URL="https://matcha-orchestrator.onrender.com" \
   -e API_KEY="your-secret-provider-key" \
   -e PROVIDER_ID="ruya-rtx-5070-laptop" \
-  ruya/matcha-provider:latest
+  ruasnv/matcha-provider:latest
+
+
+
 Let's break that down:
 
 --gpus all: Gives the agent access to the GPU.
