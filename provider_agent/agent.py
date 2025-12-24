@@ -18,14 +18,22 @@ except Exception:
     NVML_AVAILABLE = False
 
 # --- Configuration ---
+
+import os
+import sys
+
+# Update these names to match exactly what we set in the Orchestrator
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL")
 PROVIDER_ID = os.getenv("PROVIDER_ID")
-API_KEY = os.getenv("API_KEY")
-HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", 15))
+# Note: We check for ORCHESTRATOR_API_KEY_PROVIDERS
+#API_KEY = os.getenv("ORCHESTRATOR_API_KEY_PROVIDERS") 
+API_KEY = "debug-provider-key"
+HEARTBEAT_INTERVAL_SECONDS = 10  # This tells the agent to check for tasks every 10 seconds
 
 if not all([ORCHESTRATOR_URL, PROVIDER_ID, API_KEY]):
+    print(f"DEBUG: URL={ORCHESTRATOR_URL}, ID={PROVIDER_ID}, KEY={'Set' if API_KEY else 'None'}")
     print("FATAL ERROR: Missing env vars: ORCHESTRATOR_URL, PROVIDER_ID, or API_KEY")
-    exit(1)
+    sys.exit(1)
 
 # --- GPU Info Function ---
 def get_gpu_info():

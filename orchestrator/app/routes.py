@@ -3,10 +3,35 @@ from datetime import datetime
 import jsonpickle
 import uuid
 import json
-
-from .models import db, Provider, Task
+from .models import db, Provider, Task, User
 
 bp = Blueprint('api', __name__, url_prefix='/')
+
+# --- Auth Management ---
+
+@bp.route('/auth/sync', methods=['POST']) # Use @bp.route and add 'methods' (plural)
+def sync_user():
+    data = request.json
+    clerk_id = data.get('clerk_id')
+    email = data.get('email')
+
+    if not clerk_id or not email:
+        return jsonify({"error": "Missing data"}), 400
+
+    # Upsert logic
+    user = User.query.get(clerk_id)
+    if not user:
+        user = User(id=clerk_id, email=email)
+        db.session.add(user)
+    else:
+        user.email = email
+    
+    try:
+        db.session.commit()
+        return jsonify({"message": "User synced", "user_id": user.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Database error: {e}"}), 500
 
 # --- Provider Management ---
 
@@ -29,24 +54,23 @@ def provider_register():
         message = f"Provider {provider_id} re-registered successfully."
     else:
         provider = Provider(
-            id=provider_id,
-            name=provider_id,
-            gpus=gpus_json,
-            address="N/A (Pull Model)", # We no longer need the provider's address
-            last_seen=datetime.utcnow(),
-            status='active'
-        )
-        db.session.add(provider)
-        message = f"Provider {provider_id} registered successfully."
+        id=provider_id,
+        name=provider_id,
+        user_id=data.get('user_id'), # This will be None, which is now allowed
+        gpus=gpus_json,
+        address="N/A (Pull Model)",
+        last_seen=datetime.utcnow(),
+        status='active'
+    )
     
     try:
+        db.session.add(provider)
         db.session.commit()
-        print(f"DB: {message} GPUs: {gpus}")
-        return jsonify({"message": message}), 200
+        return jsonify({"message": "Successfully registered"}), 200
     except Exception as e:
         db.session.rollback()
-        print(f"DB Error registering/updating provider {provider_id}: {e}")
-        return False, f"Database error: {e}"
+        # --- FIX THIS RETURN LINE ---
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 @bp.route('/provider/task_update', methods=['POST'])
 def agent_task_update():
@@ -99,7 +123,6 @@ def agent_task_update():
     return jsonify({"message": "Task status updated."}), 200
 
 # --- Consumer Management ---
-
 @bp.route('/consumer/submit_task', methods=['POST'])
 def consumer_submit_task():
     data = request.get_json()
@@ -110,47 +133,42 @@ def consumer_submit_task():
     task_id = str(uuid.uuid4())
     new_task = Task(
         id=task_id,
-        consumer_id=data.get('consumer_id', 'default_consumer'),
+        # Synchronized: Changed consumer_id to user_id to match Model
+        user_id=data.get('user_id') or data.get('consumer_id', 'default_user'),
         docker_image=docker_image,
         gpu_requirements=jsonpickle.encode(data.get('gpu_requirements', {})),
-        status='QUEUED', # Task is now just queued
+        status='QUEUED',
         submission_time=datetime.utcnow(),
-        # --- ADD THESE NEW FIELDS ---
         input_path=data.get('input_path'),
         output_path=data.get('output_path'),
         script_path=data.get('script_path'),
-        # We'll just pass the env_vars dict as a JSON string
         env_vars=json.dumps(data.get('env_vars', {})) 
     )
     
     try:
         db.session.add(new_task)
         db.session.commit()
-        return jsonify({"task_id": task_id, "message": f"Task {task_id} submitted and queued."}), 200
+        return jsonify({"task_id": task_id, "message": f"Task {task_id} submitted."}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"DB error queuing task: {e}"}), 503
+        return jsonify({"error": f"DB error: {e}"}), 503
 
 @bp.route('/consumer/task_status/<task_id>', methods=['GET'])
 def consumer_task_status(task_id):
     task = Task.query.get(task_id)
     if task:
-        task_dict = {
-            'id': task.id, 'consumer_id': task.consumer_id,
-            'docker_image': task.docker_image,
-            'gpu_requirements': jsonpickle.decode(task.gpu_requirements),
-            'provider_id': task.provider_id,
-            'gpu_assigned': jsonpickle.decode(task.gpu_assigned) if task.gpu_assigned else None,
+        return jsonify({
+            'id': task.id, 
+            'user_id': task.user_id,
             'status': task.status,
+            'docker_image': task.docker_image,
             'submission_time': task.submission_time,
-            'last_update': task.last_update,
-            'start_time': task.start_time, 'end_time': task.end_time,
-            'error_message': task.error_message, 'stdout': task.stdout,
-            'stderr': task.stderr
-        }
-        return jsonify(task_dict), 200
-    else:
-        return jsonify({"error": f"Task ID {task_id} not found."}), 404
+            'stdout': task.stdout,
+            'stderr': task.stderr,
+            'error_message': task.error_message,
+            'provider_id': task.provider_id
+        }), 200
+    return jsonify({"error": "Task not found"}), 404
 
 # --- NEW ENDPOINT FOR PROVIDERS ---
 
@@ -226,9 +244,16 @@ def provider_get_task():
 
 
 # --- Other Endpoints (Health, Debug) ---
+@bp.route('/consumer/tasks/debug', methods=['GET'])
+def get_all_tasks_debug():
+    tasks = Task.query.order_by(Task.submission_time.desc()).all()
+    return jsonify([{
+        'id': t.id,
+        'status': t.status,
+        'submission_time': t.submission_time.isoformat() if t.submission_time else None,
+        'provider_id': t.provider_id
+    } for t in tasks]), 201
 
 @bp.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "ok"}), 200
-
-# (Your debug routes can stay here if you want)

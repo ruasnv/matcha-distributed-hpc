@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { TextInput, Textarea, Button, Group, Title, Paper, LoadingOverlay } from '@mantine/core';
 
 // This is where your live orchestrator URL will go
-const ORCHESTRATOR_URL = "https://matcha-orchestrator.onrender.com";
+// Change this:
+// const ORCHESTRATOR_URL = "https://matcha-orchestrator.onrender.com";
+
+// To this:
+const ORCHESTRATOR_URL = "http://localhost:5000";
 // We'll hard-code the consumer key for now. Later, this could be a login.
-const CONSUMER_API_KEY = "your-secret-consumer-key";
+//const CONSUMER_API_KEY = "your-secret-consumer-key";
 
 export function SubmitForm() {
   const [image, setImage] = useState('python:3.10-slim-bookworm');
@@ -24,8 +28,12 @@ export function SubmitForm() {
     const env_dict = {};
     if (envVars) {
       for (const item of envVars.split(',')) {
-        const [key, value] = item.split('=', 1);
-        env_dict[key] = value;
+        const idx = item.indexOf('='); // Find the first '='
+        if (idx > -1) {
+            const key = item.substring(0, idx);
+            const value = item.substring(idx + 1);
+            env_dict[key] = value;
+        }
       }
     }
 
