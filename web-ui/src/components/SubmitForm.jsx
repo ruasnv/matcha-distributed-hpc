@@ -1,132 +1,82 @@
 import { useState } from 'react';
-import { TextInput, Textarea, Button, Group, Title, Paper, LoadingOverlay } from '@mantine/core';
+import { TextInput, Button, Stack, Title, Paper, FileInput, Text } from '@mantine/core';
+import JSZip from 'jszip';
 
-// This is where your live orchestrator URL will go
-// Change this:
-// const ORCHESTRATOR_URL = "https://matcha-orchestrator.onrender.com";
-
-// To this:
 const ORCHESTRATOR_URL = "http://localhost:5000";
-// We'll hard-code the consumer key for now. Later, this could be a login.
-//const CONSUMER_API_KEY = "your-secret-consumer-key";
+// Matching your backend middleware key
+const CONSUMER_API_KEY = "debug-consumer-key"; 
 
 export function SubmitForm() {
-  const [image, setImage] = useState('python:3.10-slim-bookworm');
-  const [scriptPath, setScriptPath] = useState('');
-  const [inputPath, setInputPath] = useState('');
-  const [outputPath, setOutputPath] = useState('');
-  const [envVars, setEnvVars] = useState('');
-  
-  const [loading, setLoading] = useState(false);
-  const [submittedTaskId, setSubmittedTaskId] = useState(null);
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [entryPoint, setEntryPoint] = useState('main.py');
 
-  const handleSubmit = async () => {
-    setLoading(true);
-    setSubmittedTaskId(null);
-
-    // Parse env vars
-    const env_dict = {};
-    if (envVars) {
-      for (const item of envVars.split(',')) {
-        const idx = item.indexOf('='); // Find the first '='
-        if (idx > -1) {
-            const key = item.substring(0, idx);
-            const value = item.substring(idx + 1);
-            env_dict[key] = value;
-        }
-      }
-    }
-
-    const payload = {
-      docker_image: image,
-      script_path: scriptPath || null,
-      input_path: inputPath || null,
-      output_path: outputPath || null,
-      env_vars: env_dict
-    };
+  const handleUploadAndSubmit = async () => {
+    if (!file) return;
+    setUploading(true);
 
     try {
-      const response = await fetch(`${ORCHESTRATOR_URL}/consumer/submit_task`, {
+      // 1. Zip the files
+      const zip = new JSZip();
+      if (file.name.endsWith('.zip')) {
+        zip.loadAsync(file);
+      } else {
+        zip.file(file.name, file);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+
+      // 2. Upload to R2 via Orchestrator
+      const formData = new FormData();
+      formData.append('file', blob, 'project.zip');
+      
+      const uploadRes = await fetch('http://localhost:5000/consumer/upload_project', {
         method: 'POST',
-        headers: {
+        headers: { 'X-API-Key': 'debug-consumer-key' }, // AUTH IS KEY
+        body: formData,
+      });
+      const { project_url } = await uploadRes.json();
+
+      // 3. Submit Task to Orchestrator
+      await fetch('http://localhost:5000/consumer/submit_task', {
+        method: 'POST',
+        headers: { 
           'Content-Type': 'application/json',
-          'X-API-Key': CONSUMER_API_KEY,
+          'X-API-Key': 'debug-consumer-key'
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          docker_image: 'matcha-runner:latest',
+          input_path: project_url,
+          script_path: entryPoint
+        }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit task');
-      }
-
-      setSubmittedTaskId(data.task_id);
-      // We will add a "cool" pop-up notification here later
-      console.log("Task submitted!", data);
-
-    } catch (error) {
-      console.error("Submission failed:", error);
-      // We'll add a "cool" error notification here
+      alert("🚀 Research task deployed!");
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setUploading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <Paper withBorder shadow="md" p="xl" radius="md" style={{ position: 'relative' }}>
-      <LoadingOverlay visible={loading} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
-      <Title order={3} mb="lg">Submit a New Task</Title>
-      
-      <TextInput
-        label="Docker Image"
-        placeholder="e.g., pytorch/pytorch:latest"
-        value={image}
-        onChange={(e) => setImage(e.currentTarget.value)}
-        mb="sm"
-        required
-      />
-      <TextInput
-        label="Script Path (R2/S3)"
-        placeholder="r2://my-bucket/train.py"
-        value={scriptPath}
-        onChange={(e) => setScriptPath(e.currentTarget.value)}
-        mb="sm"
-      />
-      <TextInput
-        label="Input Data Path (R2/S3)"
-        placeholder="r2://my-bucket/dataset.zip"
-        value={inputPath}
-        onChange={(e) => setInputPath(e.currentTarget.value)}
-        mb="sm"
-      />
-      <TextInput
-        label="Output Path (R2/S3)"
-        placeholder="r2://my-bucket/results/"
-        value={outputPath}
-        onChange={(e) => setOutputPath(e.currentTarget.value)}
-        mb="lg"
-      />
-      <Textarea
-        label="Environment Variables"
-        placeholder="KEY=VALUE,ANOTHER_KEY=ANOTHER_VALUE"
-        value={envVars}
-        onChange={(e) => setEnvVars(e.currentTarget.value)}
-        mb="lg"
-      />
-      
-      <Group justify="flex-end">
-        <Button onClick={handleSubmit}>
-          Submit Task
+    <Paper withBorder p="xl" radius="md" shadow="sm">
+      <Stack>
+        <Title order={4}>Deploy Research Code</Title>
+        <FileInput 
+          label="Project Script" 
+          description="Select your transformer/stochastic model script"
+          placeholder="e.g. model.py" 
+          onChange={setFile} 
+        />
+        <TextInput 
+          label="Entry Point"
+          value={entryPoint}
+          onChange={(e) => setEntryPoint(e.target.value)}
+        />
+        <Button onClick={handleUploadAndSubmit} loading={uploading} fullWidth>
+          Zip & Run on Network
         </Button>
-      </Group>
-
-      {submittedTaskId && (
-        <Paper withBorder p="md" mt="lg" radius="md">
-          <Title order={5}> Task Submitted!</Title>
-          <p>Your Task ID is: {submittedTaskId}</p>
-          <p>We'll build the status viewer next!</p>
-        </Paper>
-      )}
+      </Stack>
     </Paper>
   );
 }

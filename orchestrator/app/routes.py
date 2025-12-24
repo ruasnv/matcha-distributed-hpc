@@ -4,8 +4,47 @@ import jsonpickle
 import uuid
 import json
 from .models import db, Provider, Task, User
+import os
+import boto3
+from botocore.config import Config
 
 bp = Blueprint('api', __name__, url_prefix='/')
+
+# Initialize the R2 client
+# Use 'auto' for region_name as R2 doesn't use standard AWS regions
+s3_client = boto3.client(
+    's3',
+    endpoint_url=os.getenv('R2_ENDPOINT_URL'),
+    aws_access_key_id=os.getenv('R2_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.getenv('R2_SECRET_ACCESS_KEY'),
+    config=Config(signature_version='s3v4'),
+    region_name='auto'
+)
+
+@bp.route('/consumer/upload_project', methods=['POST'])
+def upload_project():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Generate a unique path: projects/<uuid>.zip
+    project_id = str(uuid.uuid4())
+    filename = f"projects/{project_id}.zip"
+
+    try:
+        s3_client.upload_fileobj(
+            file, 
+            os.getenv('R2_BUCKET_NAME'), 
+            filename
+        )
+        # Return the R2 key so the database can store it
+        return jsonify({"project_url": f"r2://{filename}"}), 200
+    except Exception as e:
+        print(f"R2 Upload Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # --- Auth Management ---
 
