@@ -1,96 +1,97 @@
-import { useEffect } from 'react';
-import { AppShell, Burger, Group, Title, Container, Button, Center, Text, Loader } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useEffect, useState } from 'react';
+import { Container, Stack, Title, Divider, Paper, Group, Text, Badge, Center, Loader } from '@mantine/core';
 import { SubmitForm } from './components/SubmitForm';
+import { TaskTable } from './components/TaskTable';
 import { 
   SignedIn, 
   SignedOut, 
   SignInButton, 
   UserButton,
-  useUser,
-  useAuth
-} from "@clerk/clerk-react"; // Import Clerk components
+  useUser 
+} from '@clerk/clerk-react';
 
-function App() {
+export default function App() {
   const { isLoaded, isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
-  const [opened, { toggle }] = useDisclosure();
+  const [tasks, setTasks] = useState([]); // State to hold the tasks
 
- useEffect(() => {
-    // 3. ...but the LOGIC inside only runs if the conditions are met
+  // 1. Sync User Logic (Keep this)
+  useEffect(() => {
     if (isLoaded && isSignedIn && user) {
-      const syncUser = async () => {
-        try {
-          await fetch('http://localhost:5000/auth/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              clerk_id: user.id,
-              email: user.primaryEmailAddress.emailAddress
-            }),
-          });
-          console.log("✅ User synced");
-        } catch (err) {
-          console.error("❌ Sync failed", err);
-        }
-      };
-      syncUser();
+      fetch('http://localhost:5000/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clerk_id: user.id, email: user.primaryEmailAddress.emailAddress }),
+      });
     }
   }, [isLoaded, isSignedIn, user]);
 
-  // 4. ONLY AFTER HOOKS can you have early returns for loading
-  if (!isLoaded) {
-    return <Center h="100vh"><Loader /></Center>;
-  }
-  
+  // 2. NEW: Fetch User-Specific Tasks
+  useEffect(() => {
+    const fetchMyTasks = async () => {
+      if (isSignedIn && user) {
+        try {
+          // We pass the clerk_id as a header or param to get ONLY this user's tasks
+          const response = await fetch(`http://localhost:5000/consumer/tasks?clerk_id=${user.id}`);
+          const data = await response.json();
+          setTasks(Array.isArray(data) ? data : []);
+        } catch (err) {
+          console.error("Task fetch failed", err);
+        }
+      }
+    };
+
+    fetchMyTasks();
+    const interval = setInterval(fetchMyTasks, 4000); // Polling for research updates
+    return () => clearInterval(interval);
+  }, [isSignedIn, user]);
+
+  if (!isLoaded) return <Center h="100vh"><Loader /></Center>;
+
   return (
     <>
-      {/* 1. VIEW FOR LOGGED OUT USERS */}
+      {/* FEATURE RESTORED: Logged-out view */}
       <SignedOut>
-        <Container h="100vh">
-          <Center h="100%">
-            <div style={{ textAlign: 'center' }}>
-              <Title order={1} mb="md"> Kolektif </Title>
-              <Text mb="xl">Decentralized GPU computing for everyone.</Text>
-              {/* This magic button handles the entire login flow */}
-              <SignInButton mode="modal">
-                <Button size="lg" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
-                  Sign In / Register
-                </Button>
-              </SignInButton>
-            </div>
-          </Center>
-        </Container>
+        <Center h="100vh">
+          <Stack align="center">
+            <Title>Kolektif Network</Title>
+            <SignInButton mode="modal" />
+          </Stack>
+        </Center>
       </SignedOut>
 
-      {/* 2. VIEW FOR LOGGED IN USERS */}
+      {/* FEATURE RESTORED: Protected dashboard */}
       <SignedIn>
-        <AppShell header={{ height: 60 }} padding="md">
-          <AppShell.Header>
-            <Group h="100%" px="md" justify="space-between">
-              <Group>
-                <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                <Title order={3}> Kolektif </Title>
-              </Group>
+        <Container size="lg" py="xl">
+          <Stack gap="xl">
+            <Group justify="space-between">
+              <Stack gap={0}>
+                <Title order={1}>Kolektif Network</Title>
+                <Text c="dimmed">Distributed Compute for ML Research</Text>
+              </Stack>
               
               <Group>
-                {/* Show the user's email */}
-                <Text size="sm">{user?.primaryEmailAddress?.emailAddress}</Text>
-                {/* This is the "Profile" circle that lets them logout */}
-                <UserButton afterSignOutUrl="/"/>
+                <Paper withBorder p="xs" radius="md">
+                  <Group gap="xs">
+                    <Badge variant="dot" color="green">Network Active</Badge>
+                    <Text size="sm" fw={500}>{user?.primaryEmailAddress?.emailAddress}</Text>
+                  </Group>
+                </Paper>
+                <UserButton afterSignOutUrl="/" />
               </Group>
             </Group>
-          </AppShell.Header>
 
-          <AppShell.Main>
-            <Container>
+            <Paper withBorder p="xl" radius="md" shadow="sm">
               <SubmitForm />
-            </Container>
-          </AppShell.Main>
-        </AppShell>
+            </Paper>
+
+            <Divider my="sm" label="Your Research Tasks" labelPosition="center" />
+
+            <Paper withBorder p="md" radius="md">
+               <TaskTable tasks={tasks} />
+            </Paper>
+          </Stack>
+        </Container>
       </SignedIn>
     </>
   );
 }
-
-export default App;

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from datetime import datetime
+from datetime import datetime, timedelta
 import jsonpickle
 import uuid
 import json
@@ -21,23 +21,26 @@ s3_client = boto3.client(
     region_name='auto'
 )
 
+
 @bp.route('/consumer/upload_project', methods=['POST'])
 def upload_project():
+    clerk_id = request.form.get('clerk_id') # Get user ID from form data
+    if not clerk_id:
+        return jsonify({"error": "Unauthorized: Missing clerk_id"}), 401
+
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     
     file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-
-    # Generate a unique path: projects/<uuid>.zip
+    
+    # ORGANIZED PATH: projects/<user_id>/<uuid>.zip
     project_id = str(uuid.uuid4())
-    filename = f"projects/{project_id}.zip"
+    filename = f"projects/{clerk_id}/{project_id}.zip"
 
     try:
         s3_client.upload_fileobj(file, os.getenv('R2_BUCKET_NAME'), filename)
         
-        # Generate a Presigned URL (Valid for 1 hour)
+        # Presigned URL (Standard HTTPS link for the Provider)
         download_url = s3_client.generate_presigned_url(
             'get_object',
             Params={'Bucket': os.getenv('R2_BUCKET_NAME'), 'Key': filename},
@@ -46,7 +49,6 @@ def upload_project():
         
         return jsonify({"project_url": download_url}), 200
     except Exception as e:
-        print(f"R2 Upload Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # --- Auth Management ---
@@ -135,6 +137,10 @@ def agent_task_update():
         task.stdout = details['stdout']
     if 'stderr' in details:
         task.stderr = details['stderr']
+    # Check if result_url was sent in the 'details' dict
+    if 'result_url' in details:
+        task.result_url = details['result_url']
+        print(f"DEBUG: Received Result URL for task {task_id}") # Add this to debug!
     if status in ['COMPLETED', 'FAILED', 'CANCELLED']:
         task.end_time = datetime.utcnow()
     
@@ -168,32 +174,26 @@ def agent_task_update():
 @bp.route('/consumer/submit_task', methods=['POST'])
 def consumer_submit_task():
     data = request.get_json()
-    docker_image = data.get('docker_image')
-    if not docker_image:
-        return jsonify({"error": "Missing required field: docker_image"}), 400
+    clerk_id = data.get('clerk_id') # Use clerk_id consistently
+    
+    if not clerk_id:
+        return jsonify({"error": "User authentication required"}), 401
 
     task_id = str(uuid.uuid4())
     new_task = Task(
         id=task_id,
-        # Synchronized: Changed consumer_id to user_id to match Model
-        user_id=data.get('user_id') or data.get('consumer_id', 'default_user'),
-        docker_image=docker_image,
-        gpu_requirements=jsonpickle.encode(data.get('gpu_requirements', {})),
+        user_id=clerk_id, # Link task to the authenticated user
+        docker_image=data.get('docker_image', 'matcha-runner:latest'),
         status='QUEUED',
         submission_time=datetime.utcnow(),
-        input_path=data.get('input_path'),
-        output_path=data.get('output_path'),
-        script_path=data.get('script_path'),
+        input_path=data.get('input_path'), # This is the Presigned R2 URL
+        script_path=data.get('script_path', 'main.py'),
         env_vars=json.dumps(data.get('env_vars', {})) 
     )
     
-    try:
-        db.session.add(new_task)
-        db.session.commit()
-        return jsonify({"task_id": task_id, "message": f"Task {task_id} submitted."}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"DB error: {e}"}), 503
+    db.session.add(new_task)
+    db.session.commit()
+    return jsonify({"task_id": task_id, "message": "Task submitted."}), 200
 
 @bp.route('/consumer/task_status/<task_id>', methods=['GET'])
 def consumer_task_status(task_id):
@@ -211,6 +211,38 @@ def consumer_task_status(task_id):
             'provider_id': task.provider_id
         }), 200
     return jsonify({"error": "Task not found"}), 404
+
+@bp.route('/consumer/tasks', methods=['GET'])
+def get_user_tasks():
+    clerk_id = request.args.get('clerk_id')
+    if not clerk_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # 1. RUN CLEANUP LOGIC FIRST
+    stale_limit = datetime.utcnow() - timedelta(minutes=10)
+    # Find only the current user's stuck tasks
+    stuck_tasks = Task.query.filter(
+        Task.user_id == clerk_id,
+        Task.status == 'RUNNING',
+        Task.last_update < stale_limit
+    ).all()
+
+    for task in stuck_tasks:
+        task.status = 'FAILED'
+        task.error_message = "Task timed out: Provider disconnected or network failure."
+        # Optional: Add logic to free the GPU here too
+    
+    if stuck_tasks:
+        db.session.commit()
+
+    # 2. NOW FETCH AND RETURN THE TASKS
+    user_tasks = Task.query.filter_by(user_id=clerk_id).all()
+    return jsonify([{
+        "id": t.id,
+        "status": t.status,
+        "stdout": t.stdout,
+        "result_url": t.result_url
+    } for t in user_tasks]), 200
 
 # --- NEW ENDPOINT FOR PROVIDERS ---
 

@@ -46,11 +46,18 @@ def create_app():
         if request.method == 'OPTIONS':
             return
 
-        if request.endpoint and (
-            request.endpoint.startswith('static') or 
-            'health_check' in request.endpoint or
-            'sync_user' in request.endpoint
-        ):
+        # Add the consumer task routes to the exclusion list
+        excluded_endpoints = [
+            'static', 
+            'health_check', 
+            'sync_user', 
+            'upload_project',
+            'consumer_submit_task',
+            'get_user_tasks', # The name of your task-fetching function
+            'get_all_tasks_debug' # The debug route you added
+        ]
+
+        if request.endpoint and any(ex in request.endpoint for ex in excluded_endpoints):
             return
 
         api_key = request.headers.get('X-API-Key')
