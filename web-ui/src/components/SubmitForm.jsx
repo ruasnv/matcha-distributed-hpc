@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 
 const ORCHESTRATOR_URL = "http://localhost:5000";
 // Matching your backend middleware key
-const CONSUMER_API_KEY = "debug-consumer-key"; 
+const CONSUMER_API_KEY = "ultrasecretconsumerkey456"; 
 
 export function SubmitForm() {
   const [file, setFile] = useState(null);
@@ -31,7 +31,7 @@ export function SubmitForm() {
       
       const uploadRes = await fetch('http://localhost:5000/consumer/upload_project', {
         method: 'POST',
-        headers: { 'X-API-Key': 'debug-consumer-key' }, // AUTH IS KEY
+        headers: { 'X-API-Key': 'ultrasecretconsumerkey456' }, // AUTH IS KEY
         body: formData,
       });
       const { project_url } = await uploadRes.json();
@@ -41,7 +41,7 @@ export function SubmitForm() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'X-API-Key': 'debug-consumer-key'
+          'X-API-Key': 'ultrasecretconsumerkey456'
         },
         body: JSON.stringify({
           docker_image: 'matcha-runner:latest',
@@ -63,8 +63,8 @@ export function SubmitForm() {
       <Stack>
         <Title order={4}>Deploy Research Code</Title>
         <FileInput 
-          label="Project Script" 
-          description="Select your transformer/stochastic model script"
+          label="Script" 
+          description="Select your script"
           placeholder="e.g. model.py" 
           onChange={setFile} 
         />

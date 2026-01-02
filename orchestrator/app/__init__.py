@@ -48,17 +48,13 @@ def create_app():
 
         if request.endpoint and (
             request.endpoint.startswith('static') or 
-            'health_check' in request.endpoint
+            'health_check' in request.endpoint or
+            'sync_user' in request.endpoint
         ):
             return
 
         api_key = request.headers.get('X-API-Key')
         
-        # --- ADD THESE DEBUG PRINTS ---
-        print(f"DEBUG AUTH: Path={request.path}")
-        print(f"DEBUG AUTH: Key Provided={api_key}")
-        print(f"DEBUG AUTH: Expected Provider Key={app.config.get('ORCHESTRATOR_API_KEY_PROVIDERS')}")
-
         if not api_key:
             return jsonify({"error": "API Key missing"}), 401
 

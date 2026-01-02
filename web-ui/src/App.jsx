@@ -50,7 +50,7 @@ function App() {
         <Container h="100vh">
           <Center h="100%">
             <div style={{ textAlign: 'center' }}>
-              <Title order={1} mb="md">🚀 Matcha Compute</Title>
+              <Title order={1} mb="md"> Kolektif </Title>
               <Text mb="xl">Decentralized GPU computing for everyone.</Text>
               {/* This magic button handles the entire login flow */}
               <SignInButton mode="modal">
@@ -70,7 +70,7 @@ function App() {
             <Group h="100%" px="md" justify="space-between">
               <Group>
                 <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                <Title order={3}>🚀 Matcha</Title>
+                <Title order={3}> Kolektif </Title>
               </Group>
               
               <Group>

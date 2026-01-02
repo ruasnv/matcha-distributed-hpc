@@ -35,13 +35,16 @@ def upload_project():
     filename = f"projects/{project_id}.zip"
 
     try:
-        s3_client.upload_fileobj(
-            file, 
-            os.getenv('R2_BUCKET_NAME'), 
-            filename
+        s3_client.upload_fileobj(file, os.getenv('R2_BUCKET_NAME'), filename)
+        
+        # Generate a Presigned URL (Valid for 1 hour)
+        download_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': os.getenv('R2_BUCKET_NAME'), 'Key': filename},
+            ExpiresIn=3600 
         )
-        # Return the R2 key so the database can store it
-        return jsonify({"project_url": f"r2://{filename}"}), 200
+        
+        return jsonify({"project_url": download_url}), 200
     except Exception as e:
         print(f"R2 Upload Error: {e}")
         return jsonify({"error": str(e)}), 500
