@@ -4,36 +4,45 @@ import tempfile
 import time
 import requests
 import wsgiref.headers
-if not hasattr(wsgiref.headers.Headers, 'items'):
-    wsgiref.headers.Headers.items = lambda self: self._headers
 import docker
 import json
 import boto3
 from botocore.config import Config
+from dotenv import load_dotenv
+
+# Load .env file if it exists
+load_dotenv()
+
+if not hasattr(wsgiref.headers.Headers, 'items'):
+    wsgiref.headers.Headers.items = lambda self: self._headers
 
 # --- 1. Configuration ---
-ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:5000")
-PROVIDER_ID = os.getenv("PROVIDER_ID", "ruya-laptop-1")
+# Fallback to the Render URL if the environment variable is missing
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "https://matcha-orchestrator.onrender.com")
+PROVIDER_ID = os.getenv("PROVIDER_ID", "ruya-laptop-wsl")
 API_KEY = "debug-provider-key"
 HEARTBEAT_INTERVAL = 10
 headers = {"X-API-Key": API_KEY}
 
 client = docker.from_env()
+
+# Ensure these are also loaded from your local .env or set directly
 s3_client = boto3.client(
     's3',
     endpoint_url=os.getenv('R2_ENDPOINT_URL'),
     aws_access_key_id=os.getenv('R2_ACCESS_KEY_ID'),
     aws_secret_access_key=os.getenv('R2_SECRET_ACCESS_KEY'),
     config=Config(
-        signature_version='s3v4', # <--- THIS IS CRITICAL
-        region_name='auto'        # <--- MUST BE 'auto' for R2
+        signature_version='s3v4',
+        region_name='auto'
     )
 )
 
 def register_provider():
     """Register this machine as a worker on the network"""
     url = f"{ORCHESTRATOR_URL}/provider/register"
-    # Sending dummy GPU info since NVML is disabled in WSL
+    print(f"📡 Attempting to register at: {url}")
+    
     payload = {
         "provider_id": PROVIDER_ID,
         "gpus": [{"id": "cpu_0", "name": "Standard Worker", "status": "idle"}]
@@ -42,22 +51,36 @@ def register_provider():
     try:
         res = requests.post(url, json=payload, headers=headers)
         res.raise_for_status()
-        print(f"Registered as {PROVIDER_ID}")
+        print(f"✅ Registered successfully as {PROVIDER_ID}")
     except Exception as e:
-        print(f"Registration failed: {e}")
+        print(f"❌ Registration failed: {e}")
+        # Don't exit immediately; let's see the error detail
+        if hasattr(e, 'response') and e.response is not None:
+             print(f"Response Detail: {e.response.text}")
         exit(1)
 
 def update_task_status(task_id, status, logs=None, result_url=None):
+    """Sends task updates back to the orchestrator"""
+    url = f"{ORCHESTRATOR_URL}/provider/task_update"
+    
+    # We pass result_url directly in the payload so the Orchestrator 
+    # can save it to the database 'result_url' column.
     payload = {
         "task_id": task_id,
         "status": status,
+        "result_url": result_url, # Orchestrator looks for this
         "details": {
-            "stdout": logs,
-            "result_url": result_url  # <--- IS THIS HERE?
+            "stdout": logs
         }
     }
-    requests.post(f"{ORCHESTRATOR_URL}/provider/task_update", json=payload, headers=headers)
+    try:
+        res = requests.post(url, json=payload, headers=headers)
+        res.raise_for_status()
+        print(f"📊 Status updated: {status} for Task {task_id}")
+    except Exception as e:
+        print(f"⚠️ Failed to update task status: {e}")
 
+# ... (rest of your polling logic) ...
 def poll_and_run():
     """Main loop: Poll for tasks and execute them"""
     url = f"{ORCHESTRATOR_URL}/provider/get_task"
