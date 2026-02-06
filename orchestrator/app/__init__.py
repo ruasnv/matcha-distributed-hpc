@@ -10,25 +10,34 @@ def create_app():
     app = Flask(__name__, instance_relative_config=True)
     CORS(app)
 
-    # 1. Determine the database URL
-    # Look for DATABASE_URL (Render), then fallback to local SQLite
+    # 1. Determine and Clean the database URL
     db_url = os.environ.get('DATABASE_URL')
-    if not db_url:
-        # This will create a 'matcha.db' file in your orchestrator folder
+    
+    if db_url:
+        # FIX: Neon/Render often provide 'postgres://', but SQLAlchemy 1.4+ 
+        # requires 'postgresql://' to function correctly.
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
+        print("🌐 Using Cloud Postgres (Neon/Render)")
+    else:
+        # Fallback to local SQLite for local testing if no cloud DB is linked
         db_url = "sqlite:///matcha.db"
         print("⚠️ No DATABASE_URL found. Using local SQLite: matcha.db")
 
-    # 2. Load all configurations at once
+    # 2. Load configurations
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-123'),
-        #ORCHESTRATOR_API_KEY_PROVIDERS=os.environ.get('ORCHESTRATOR_API_KEY_PROVIDERS', 'debug-provider-key'),
         ORCHESTRATOR_API_KEY_PROVIDERS='debug-provider-key',
         ORCHESTRATOR_API_KEY_CONSUMERS=os.environ.get('ORCHESTRATOR_API_KEY_CONSUMERS', 'debug-consumer-key'),
-        SQLALCHEMY_DATABASE_URI=db_url, # <--- Now guaranteed to have a value
+        SQLALCHEMY_DATABASE_URI=db_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        # NEW: Neon requires SSL. This tells SQLAlchemy to use it.
+        SQLALCHEMY_ENGINE_OPTIONS={
+            "connect_args": {"sslmode": "require"} if db_url.startswith("postgresql") else {}
+        },
         FLASK_ENV=os.environ.get('FLASK_ENV', 'development')
     )
-
+    
     # 3. Initialize extensions AFTER config is set
     db.init_app(app)
 
