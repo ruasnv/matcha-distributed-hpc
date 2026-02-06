@@ -48,29 +48,33 @@ def create_app():
 
     @app.before_request
     def check_api_key():
-        # 1. ALWAYS allow these (Check PATH, not just ENDPOINT)
-        # This bypasses the need for the route to be "defined" yet
-        if request.method == 'OPTIONS' or request.path == '/' or 'favicon.ico' in request.path:
+        if request.method == 'OPTIONS':
             return
 
-        # 2. Check the exclusion list for named endpoints
-        excluded_endpoints = [
-            'static', 'health_check', 'sync_user', 'upload_project',
-            'consumer_submit_task', 'get_user_tasks', 'get_all_tasks_debug', 'index'
+        # 1. THE TRUTH SOURCE: Check the actual URL path
+        # If the user is at the root, or loading the favicon, let them through!
+        if request.path == "/" or "favicon.ico" in request.path:
+            return
+
+        # 2. List of paths that DON'T need a key
+        # Note: These are substrings of your URLs
+        public_paths = [
+            '/health_check', 
+            '/sync_user', 
+            '/upload_project', 
+            '/consumer/tasks'
         ]
 
-        # Use .get() or a safer check for request.endpoint
-        endpoint = request.endpoint or ""
-        if any(ex in endpoint for ex in excluded_endpoints):
+        if any(path in request.path for path in public_paths):
             return
 
-        # --- AUTH LOGIC ---
+        # 3. AUTH LOGIC
         api_key = request.headers.get('X-API-Key')
         
-        # If no key is provided -> 401
         if not api_key:
-            return jsonify({"error": f"API Key missing for path: {request.path}"}), 401
-
+            # We add the path to the error so we can debug exactly what is being blocked
+            return jsonify({"error": f"API Key missing for {request.path}"}), 401
+        
         # Determine which key to check
         if request.path.startswith('/provider') or request.path.startswith('/agent'):
             expected_key = app.config.get('ORCHESTRATOR_API_KEY_PROVIDERS')

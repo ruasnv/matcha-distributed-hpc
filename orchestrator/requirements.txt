@@ -7,3 +7,10 @@ gunicorn
 psycopg2-binary
 Flask-SQLAlchemy
 Flask-CORS
+flask-sqlalchemy
+flask-cors
+python-dotenv
+psycopg2-binary
+boto3
+botocore
+gunicorn
