@@ -23,6 +23,7 @@ class Provider(db.Model):
     status = db.Column(db.String(20), default='active')
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     address = db.Column(db.String(255), nullable=True)
+    last_telemetry = db.Column(db.JSON, nullable=True)
 
 class Task(db.Model):
     __tablename__ = 'tasks'
