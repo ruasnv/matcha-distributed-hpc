@@ -50,11 +50,11 @@ def create_app():
         try:
             # This is the "safe" way to do it in production
             db.create_all()
-            print("✅ Database tables verified/initialized.")
+            print(" Database tables verified/initialized.")
         except Exception as e:
             # If a worker fails because another worker already created the table,
             # we just log it and move on instead of crashing.
-            print(f"⚠️ Database initialization note: {e}")    
+            print(f" Database initialization note: {e}")    
 
     # --- THE FIXES ARE BELOW ---
 
