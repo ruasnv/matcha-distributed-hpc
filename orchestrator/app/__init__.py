@@ -37,7 +37,7 @@ def create_app():
         SQLALCHEMY_DATABASE_URI=db_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SQLALCHEMY_ENGINE_OPTIONS={
-            "pool_pre_ping": True,  # 👈 The "Are you still there?" check
+            "pool_pre_ping": True, 
             "pool_recycle": 280,
             "connect_args": {"sslmode": "require"} if db_url.startswith("postgresql") else {}
         }

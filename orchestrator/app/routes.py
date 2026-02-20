@@ -10,6 +10,7 @@ from botocore.config import Config
 from functools import wraps
 
 bp = Blueprint('api', __name__, url_prefix='/')
+LAST_CLEANUP_TIME = datetime.utcnow()
 
 # Initialize the R2 client
 # Use 'auto' for region_name as R2 doesn't use standard AWS regions
@@ -241,34 +242,47 @@ def consumer_task_status(task_id):
 
 @bp.route('/consumer/tasks', methods=['GET'])
 def get_user_tasks():
+    global LAST_CLEANUP_TIME
     clerk_id = request.args.get('clerk_id')
+    
     if not clerk_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    # 1. RUN CLEANUP LOGIC FIRST
-    stale_limit = datetime.utcnow() - timedelta(minutes=10)
-    # Find only the current user's stuck tasks
-    stuck_tasks = Task.query.filter(
-        Task.user_id == clerk_id,
-        Task.status == 'RUNNING',
-        Task.last_update < stale_limit
-    ).all()
+    # 1. OPTIMIZED CLEANUP: Only run if it's been more than 5 minutes
+    now = datetime.utcnow()
+    if (now - LAST_CLEANUP_TIME).total_seconds() > 300: # 300 seconds = 5 minutes
+        stale_limit = now - timedelta(minutes=10)
+        
+        # Only cleanup tasks that are stuck in 'RUNNING'
+        stuck_tasks = Task.query.filter(
+            Task.status == 'RUNNING',
+            Task.last_update < stale_limit
+        ).all()
 
-    for task in stuck_tasks:
-        task.status = 'FAILED'
-        task.error_message = "Task timed out: Provider disconnected or network failure."
-        # Optional: Add logic to free the GPU here too
+        for task in stuck_tasks:
+            task.status = 'FAILED'
+            task.error_message = "Task timed out: Provider heartbeat lost."
+            # If the task had a provider, we should ideally free that GPU too
+        
+        if stuck_tasks:
+            try:
+                db.session.commit()
+                print(f"🧹 Cleaned up {len(stuck_tasks)} stuck tasks.")
+            except Exception as e:
+                db.session.rollback()
+                print(f"Cleanup error: {e}")
+        
+        LAST_CLEANUP_TIME = now # Reset the timer
+
+    # 2. FAST FETCH: Just get the user's tasks
+    user_tasks = Task.query.filter_by(user_id=clerk_id).order_by(Task.submission_time.desc()).all()
     
-    if stuck_tasks:
-        db.session.commit()
-
-    # 2. NOW FETCH AND RETURN THE TASKS
-    user_tasks = Task.query.filter_by(user_id=clerk_id).all()
     return jsonify([{
         "id": t.id,
         "status": t.status,
         "stdout": t.stdout,
-        "result_url": t.result_url
+        "result_url": t.result_url,
+        "submission_time": t.submission_time.isoformat() if t.submission_time else None
     } for t in user_tasks]), 200
 
 # --- NEW ENDPOINT FOR PROVIDERS ---

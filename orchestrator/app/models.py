@@ -50,7 +50,7 @@ class Task(db.Model):
     submission_time = db.Column(db.DateTime, default=datetime.utcnow)
     start_time = db.Column(db.DateTime, nullable=True)
     end_time = db.Column(db.DateTime, nullable=True)
-    last_update = db.Column(db.DateTime, default=datetime.utcnow)
+    last_update = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Execution Feedback
     stdout = db.Column(db.Text)
