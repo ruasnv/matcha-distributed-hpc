@@ -39,18 +39,26 @@ def require_api_key(f):
 @bp.route('/provider/my_devices', methods=['GET'])
 def get_my_devices():
     clerk_id = request.args.get('clerk_id')
-    if not clerk_id:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    devices = Provider.query.filter_by(user_id=clerk_id).all()
     
-    return jsonify([{
-        "id": d.id,
-        "name": d.name,
-        "status": d.status,
-        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
-        "telemetry": d.last_telemetry # This is the "Live Pulse" we added
-    } for d in devices]), 200
+    if not clerk_id:
+        print("DEBUG: Fetch failed because clerk_id was missing in the request")
+        return jsonify({"error": "Unauthorized: No clerk_id provided"}), 401
+
+    try:
+        # Fetch devices linked to this Clerk ID
+        devices = Provider.query.filter_by(user_id=clerk_id).all()
+        
+        return jsonify([{
+            "id": d.id,
+            "name": d.name,
+            "status": d.status,
+            "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+            "telemetry": d.last_telemetry 
+        } for d in devices]), 200
+        
+    except Exception as e:
+        print(f"DEBUG: Database error in my_devices: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @bp.route('/consumer/upload_project', methods=['POST'])
 def upload_project():
@@ -108,40 +116,40 @@ def sync_user():
         return jsonify({"error": f"Database error: {e}"}), 500
 
 # --- Provider Management ---
-
 @bp.route('/provider/register', methods=['POST'])
+@require_api_key # Added security
 def provider_register():
     data = request.get_json()
     provider_id = data.get('provider_id')
-    
-    # We now look for hardware_specs instead of just gpus
     specs = data.get('hardware_specs', {}) 
     
     provider = Provider.query.get(provider_id)
     
+    # We still want to maintain a 'gpus' list for the task-matching logic
+    # Let's extract it from the specs we got from the agent
+    detected_gpus = []
+    if "gpu" in specs:
+        detected_gpus = [{"id": "gpu-0", "name": specs["gpu"]["name"], "status": "idle"}]
+
     if provider:
-        provider.specs = specs # Update specs
+        provider.specs = specs
+        provider.gpus = jsonpickle.encode(detected_gpus, unpicklable=False) # Keep legacy logic happy
         provider.last_seen = datetime.utcnow()
         provider.status = 'active'
     else:
         provider = Provider(
             id=provider_id,
             name=provider_id,
-            user_id=data.get('user_id'), # From the enrollment token (coming soon)
+            user_id=data.get('user_id'),
             specs=specs,
+            gpus=jsonpickle.encode(detected_gpus, unpicklable=False),
             last_seen=datetime.utcnow(),
             status='active'
         )
         db.session.add(provider)
     
-    try:
-        db.session.commit()
-        return jsonify({"message": "Successfully registered"}), 200
-    except Exception as e:
-        db.session.rollback()
-        # This will now print the REAL error to Render logs
-        print(f"REGISTRATION ERROR: {e}") 
-        return jsonify({"error": str(e)}), 500
+    db.session.commit()
+    return jsonify({"message": "Successfully registered"}), 200
 
         
 @bp.route('/provider/task_update', methods=['POST'])

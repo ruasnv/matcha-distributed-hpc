@@ -71,9 +71,10 @@ def create_app():
         # Note: These are substrings of your URLs
         public_paths = [
             '/health_check', 
-            '/sync_user', 
-            '/upload_project', 
-            '/consumer/tasks'
+            '/auth/sync',           # Fixed: Changed from sync_user to match your actual route
+            '/consumer/upload_project', 
+            '/consumer/tasks',
+            '/provider/my_devices'  # 👈 ADD THIS LINE
         ]
 
         if any(path in request.path for path in public_paths):
