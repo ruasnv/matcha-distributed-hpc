@@ -54,30 +54,32 @@ def get_telemetry():
         "cpu_load": cpu_usage,
         "ram_used_gb": round(ram.used / (1024**3), 2),
         "ram_total_gb": round(ram.total / (1024**3), 2),
-        "status": "idle"
+        "status": "idle",
+        "gpu": None # Default to None
     }
 
     try:
-        pynvml.nvmlInit() # Ensure it's initialized inside the try block
+        pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        
+        # We use str() and int() explicitly to avoid JSON serialization errors
+        name = pynvml.nvmlDeviceGetName(handle)
+        if isinstance(name, bytes): name = name.decode('utf-8')
+        
         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
         mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
         
         telemetry["gpu"] = {
-            "name": pynvml.nvmlDeviceGetName(handle),
-            "load": util.gpu,
+            "name": str(name),
+            "load": int(util.gpu),
             "vram_used": round(mem.used / (1024**3), 2),
             "vram_total": round(mem.total / (1024**3), 2)
         }
+        pynvml.nvmlShutdown()
     except Exception as e:
-        # If GPU fails, we still return CPU telemetry so the UI shows SOMETHING
-        telemetry["gpu"] = None 
-        # print(f"GPU Info not available: {e}") 
-    finally:
-        try:
-            pynvml.nvmlShutdown()
-        except:
-            pass
+        # Silencing the error so it doesn't spam your console, 
+        # but we still get CPU data.
+        pass
             
     return telemetry
 
