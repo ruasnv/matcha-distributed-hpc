@@ -112,39 +112,37 @@ def sync_user():
 def provider_register():
     data = request.get_json()
     provider_id = data.get('provider_id')
-    gpus = data.get('gpus')
     
-    if not provider_id or not gpus:
-        return jsonify({"error": "Missing provider_id or gpus data"}), 400
-
-    gpus_json = jsonpickle.encode(gpus, unpicklable=False)
+    # We now look for hardware_specs instead of just gpus
+    specs = data.get('hardware_specs', {}) 
+    
     provider = Provider.query.get(provider_id)
     
     if provider:
-        provider.gpus = gpus_json
+        provider.specs = specs # Update specs
         provider.last_seen = datetime.utcnow()
         provider.status = 'active'
-        message = f"Provider {provider_id} re-registered successfully."
     else:
         provider = Provider(
-        id=provider_id,
-        name=provider_id,
-        user_id=data.get('user_id'), # This will be None, which is now allowed
-        gpus=gpus_json,
-        address="N/A (Pull Model)",
-        last_seen=datetime.utcnow(),
-        status='active'
-    )
+            id=provider_id,
+            name=provider_id,
+            user_id=data.get('user_id'), # From the enrollment token (coming soon)
+            specs=specs,
+            last_seen=datetime.utcnow(),
+            status='active'
+        )
+        db.session.add(provider)
     
     try:
-        db.session.add(provider)
         db.session.commit()
         return jsonify({"message": "Successfully registered"}), 200
     except Exception as e:
         db.session.rollback()
-        # --- FIX THIS RETURN LINE ---
-        return jsonify({"error": f"Database error: {str(e)}"}), 500
+        # This will now print the REAL error to Render logs
+        print(f"REGISTRATION ERROR: {e}") 
+        return jsonify({"error": str(e)}), 500
 
+        
 @bp.route('/provider/task_update', methods=['POST'])
 def agent_task_update():
     data = request.get_json()
