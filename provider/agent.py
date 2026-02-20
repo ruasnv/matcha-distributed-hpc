@@ -10,6 +10,7 @@ import boto3
 from botocore.config import Config
 from dotenv import load_dotenv
 import psutil
+import argparse
 import platform
 try:
     import pynvml # NVIDIA Management Library
@@ -46,6 +47,42 @@ s3_client = boto3.client(
     )
 )
 
+# --- GLOBAL DYNAMIC GPU INITIALIZATION ---
+GPU_HANDLE = None
+GPU_NAME = "Unknown GPU" # Default
+# 1. Parse the command line for the token
+parser = argparse.ArgumentParser()
+parser.add_argument("--enroll", help="The enrollment token from the Matcha UI")
+args = parser.parse_args()
+
+try:
+    pynvml.nvmlInit()
+    GPU_HANDLE = pynvml.nvmlDeviceGetHandleByIndex(0)
+    
+    # DYNAMIC DETECTION: Get the real name from the driver
+    name_raw = pynvml.nvmlDeviceGetName(GPU_HANDLE)
+    GPU_NAME = name_raw.decode('utf-8') if isinstance(name_raw, bytes) else str(name_raw)
+    
+    print(f"✅ Dynamic Hardware Detection: Found {GPU_NAME}")
+except Exception as e:
+    print(f"⚠️ GPU Detection skipped (CPU Only Mode): {e}")
+
+def run_enrollment(token):
+    print(f"🔑 Attempting to enroll with token: {token}...")
+    res = requests.post(f"{ORCHESTRATOR_URL}/provider/enroll", json={
+        "token": token,
+        "provider_id": PROVIDER_ID
+    })
+    
+    if res.status_code == 200:
+        user_id = res.json().get('user_id')
+        # Save this user_id to a local .env or config file so it's remembered!
+        print(f"✅ Successfully linked to account: {user_id}")
+        return user_id
+    else:
+        print(f"❌ Enrollment failed: {res.json().get('error')}")
+        exit(1)
+        
 def get_telemetry():
     cpu_usage = psutil.cpu_percent(interval=1)
     ram = psutil.virtual_memory()
@@ -55,31 +92,23 @@ def get_telemetry():
         "ram_used_gb": round(ram.used / (1024**3), 2),
         "ram_total_gb": round(ram.total / (1024**3), 2),
         "status": "idle",
-        "gpu": None # Default to None
+        "gpu": None
     }
 
-    try:
-        pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        
-        # We use str() and int() explicitly to avoid JSON serialization errors
-        name = pynvml.nvmlDeviceGetName(handle)
-        if isinstance(name, bytes): name = name.decode('utf-8')
-        
-        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-        mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        
-        telemetry["gpu"] = {
-            "name": str(name),
-            "load": int(util.gpu),
-            "vram_used": round(mem.used / (1024**3), 2),
-            "vram_total": round(mem.total / (1024**3), 2)
-        }
-        pynvml.nvmlShutdown()
-    except Exception as e:
-        # Silencing the error so it doesn't spam your console, 
-        # but we still get CPU data.
-        pass
+    if GPU_HANDLE:
+        try:
+            util = pynvml.nvmlDeviceGetUtilizationRates(GPU_HANDLE)
+            mem = pynvml.nvmlDeviceGetMemoryInfo(GPU_HANDLE)
+            
+            telemetry["gpu"] = {
+                "name": GPU_NAME, # 👈 Using the dynamically detected name
+                "load": int(util.gpu),
+                "vram_used": round(mem.used / (1024**3), 2),
+                "vram_total": round(mem.total / (1024**3), 2)
+            }
+        except Exception as e:
+            # Handle transient "blips" without losing the name
+            telemetry["gpu"] = {"name": GPU_NAME, "load": 0, "status": "offline"}
             
     return telemetry
 

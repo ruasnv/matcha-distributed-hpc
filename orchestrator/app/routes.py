@@ -5,6 +5,8 @@ import uuid
 import json
 from .models import db, Provider, Task, User
 import os
+import secrets
+from .models import EnrollmentToken
 import boto3
 from botocore.config import Config
 from functools import wraps
@@ -35,6 +37,62 @@ def require_api_key(f):
             return jsonify({"error": "Unauthorized: Invalid or missing API Key"}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+@bp.route('/auth/generate_enrollment_token', methods=['POST'])
+def generate_token():
+    data = request.get_json()
+    clerk_id = data.get('clerk_id')
+    
+    if not clerk_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Generate a 6-digit hex token (e.g., A1B2C3)
+    token_str = secrets.token_hex(3).upper() 
+    
+    new_token = EnrollmentToken(
+        token=token_str, 
+        user_id=clerk_id,
+        expires_at=datetime.utcnow() + timedelta(minutes=15)
+    )
+    
+    db.session.add(new_token)
+    db.session.commit()
+    
+    return jsonify({"token": token_str}), 200
+
+@bp.route('/auth/generate_enrollment_token', methods=['POST'])
+def generate_token():
+    data = request.json
+    clerk_id = data.get('clerk_id')
+    
+    # Generate a random 6-character code
+    token_str = secrets.token_hex(3).upper() 
+    
+    new_token = EnrollmentToken(token=token_str, user_id=clerk_id)
+    db.session.add(new_token)
+    db.session.commit()
+    
+    return jsonify({"token": token_str}), 200
+
+@bp.route('/provider/enroll', methods=['POST'])
+def enroll_provider():
+    data = request.json
+    token_str = data.get('token').upper()
+    provider_id = data.get('provider_id')
+    
+    token_entry = EnrollmentToken.query.filter_by(token=token_str, is_used=FALSE).first()
+    
+    if not token_entry or datetime.utcnow() > token_entry.expires_at:
+        return jsonify({"error": "Invalid or expired token"}), 400
+    
+    # Link the provider to the user who generated the token
+    token_entry.is_used = True
+    db.session.commit()
+    
+    return jsonify({
+        "user_id": token_entry.user_id,
+        "message": "Enrollment successful"
+    }), 200
 
 @bp.route('/provider/my_devices', methods=['GET'])
 def get_my_devices():
