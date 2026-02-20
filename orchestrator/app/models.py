@@ -25,6 +25,14 @@ class Provider(db.Model):
     address = db.Column(db.String(255), nullable=True)
     last_telemetry = db.Column(db.JSON, nullable=True)
 
+class EnrollmentToken(db.Model):
+    __tablename__ = 'enrollment_tokens'
+    token = db.Column(db.String, primary_key=True)
+    user_id = db.Column(db.String, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    is_used = db.Column(db.Boolean, default=False)
+
 class Task(db.Model):
     __tablename__ = 'tasks'
     

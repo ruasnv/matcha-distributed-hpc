@@ -9,16 +9,15 @@ load_dotenv()
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
     CORS(app, resources={
-        r"/*": {
-            "origins": [
-                "https://matcha-ui.onrender.com",
-                "http://localhost:5173"
-            ],
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-API-Key"]
-        }
+    r"/*": {
+        "origins": ["https://matcha-ui.onrender.com", "http://localhost:5173"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "X-API-Key", "Authorization"],
+        "expose_headers": ["Content-Type", "X-API-Key"],
+        "supports_credentials": True
+    }
     })
-
+    
     # 1. Database URL Cleaning
     db_url = os.environ.get('DATABASE_URL')
     if db_url:
@@ -71,10 +70,11 @@ def create_app():
         # Note: These are substrings of your URLs
         public_paths = [
             '/health_check', 
-            '/auth/sync',           # Fixed: Changed from sync_user to match your actual route
+            '/auth/sync',
             '/consumer/upload_project', 
             '/consumer/tasks',
-            '/provider/my_devices'  # 👈 ADD THIS LINE
+            '/provider/my_devices',
+            '/auth/generate_enrollment_token'
         ]
 
         if any(path in request.path for path in public_paths):
