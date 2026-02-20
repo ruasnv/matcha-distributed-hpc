@@ -7,6 +7,7 @@ from .models import db, Provider, Task, User
 import os
 import boto3
 from botocore.config import Config
+from functools import wraps
 
 bp = Blueprint('api', __name__, url_prefix='/')
 
@@ -20,6 +21,19 @@ s3_client = boto3.client(
     config=Config(signature_version='s3v4'),
     region_name='auto'
 )
+
+# --- Security Decorator ---
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        # Replace this with your actual environment variable check
+        expected_key = os.getenv("ORCHESTRATOR_API_KEY", "debug-provider-key")
+        
+        if not api_key or api_key != expected_key:
+            return jsonify({"error": "Unauthorized: Invalid or missing API Key"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 @bp.route('/consumer/upload_project', methods=['POST'])
@@ -327,6 +341,26 @@ def get_all_tasks_debug():
         'submission_time': t.submission_time.isoformat() if t.submission_time else None,
         'provider_id': t.provider_id
     } for t in tasks]), 201
+
+@bp.route('/provider/heartbeat', methods=['POST'])
+@require_api_key 
+def provider_heartbeat():
+    data = request.get_json()
+    provider_id = data.get('provider_id')
+    telemetry = data.get('telemetry')
+    
+    if not provider_id:
+        return jsonify({"error": "Missing provider_id"}), 400
+
+    provider = Provider.query.get(provider_id)
+    if provider:
+        provider.last_seen = datetime.utcnow()
+        # Ensure 'last_telemetry' exists in your models.py as a JSON column!
+        provider.last_telemetry = telemetry 
+        db.session.commit()
+        return jsonify({"status": "received"}), 200
+    
+    return jsonify({"error": "Provider not found"}), 404
 
 @bp.route('/health', methods=['GET'])
 def health_check():

@@ -9,6 +9,14 @@ import json
 import boto3
 from botocore.config import Config
 from dotenv import load_dotenv
+import psutil
+import platform
+try:
+    import pynvml # NVIDIA Management Library
+    pynvml.nvmlInit()
+    HAS_GPU = True
+except:
+    HAS_GPU = False
 
 # Load .env file if it exists
 load_dotenv()
@@ -37,6 +45,37 @@ s3_client = boto3.client(
         region_name='auto'
     )
 )
+
+def get_telemetry():
+    """Gathers real-time performance data."""
+    cpu_usage = psutil.cpu_percent(interval=1)
+    ram = psutil.virtual_memory()
+    
+    telemetry = {
+        "cpu_load": cpu_usage,
+        "ram_used_gb": round(ram.used / (1024**3), 2),
+        "ram_total_gb": round(ram.total / (1024**3), 2),
+        "status": "idle"
+    }
+
+    if HAS_GPU:
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            temp = pynvml.nvmlDeviceGetTemperature(handle, 0)
+            
+            telemetry["gpu"] = {
+                "name": pynvml.nvmlDeviceGetName(handle),
+                "load": util.gpu,
+                "vram_used": round(mem.used / (1024**3), 2),
+                "vram_total": round(mem.total / (1024**3), 2),
+                "temp": temp
+            }
+        except Exception as e:
+            print(f"GPU Telemetry failed: {e}")
+            
+    return telemetry
 
 def register_provider():
     """Register this machine as a worker on the network"""
