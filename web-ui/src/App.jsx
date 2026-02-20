@@ -69,18 +69,89 @@ export default function App() {
     </Container>
   );
 
-  // View 2: The upcoming Fleet Manager
-  const FleetDashboard = () => (
-    <Container size="lg" py="md">
-      <Title order={2}>Your Compute Nodes</Title>
-      <Text c="dimmed" mb="xl">Manage your enrolled provider devices and view their live telemetry.</Text>
-      <Paper withBorder p="xl" radius="md" shadow="sm">
-        <Center h={200}>
-          <Text c="dimmed">Device list and enrollment wizard coming next...</Text>
-        </Center>
-      </Paper>
-    </Container>
-  );
+const FleetDashboard = () => {
+    const [devices, setDevices] = useState([]);
+
+    useEffect(() => {
+      const fetchDevices = async () => {
+        if (isSignedIn && user) {
+          try {
+            const response = await fetch(`${API_URL}/provider/my_devices?clerk_id=${user.id}`);
+            const data = await response.json();
+            setDevices(Array.isArray(data) ? data : []);
+          } catch (err) {
+            console.error("Failed to fetch devices", err);
+          }
+        }
+      };
+
+      fetchDevices();
+      const interval = setInterval(fetchDevices, 5000); // Poll every 5 seconds
+      return () => clearInterval(interval);
+    }, [isSignedIn, user]);
+
+    return (
+      <Container size="lg" py="md">
+        <Group justify="space-between" mb="xl">
+          <Stack gap={0}>
+            <Title order={2}>Your Compute Nodes</Title>
+            <Text c="dimmed">Live telemetry from your enrolled devices.</Text>
+          </Stack>
+          {/* We will build the enrollment token generator next! */}
+          <Button variant="light" color="green">+ Enroll New Device</Button>
+        </Group>
+
+        <Paper withBorder p="md" radius="md" shadow="sm">
+          {devices.length === 0 ? (
+            <Center h={100}><Text c="dimmed">No devices enrolled yet.</Text></Center>
+          ) : (
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Device Name</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th>CPU Load</Table.Th>
+                  <Table.Th>GPU</Table.Th>
+                  <Table.Th>GPU Load</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {devices.map((device) => {
+                  const t = device.telemetry || {};
+                  const gpuName = t.gpu?.name || "CPU Only";
+                  const gpuLoad = t.gpu?.load || 0;
+                  
+                  return (
+                    <Table.Tr key={device.id}>
+                      <Table.Td fw={500}>{device.name || device.id}</Table.Td>
+                      <Table.Td>
+                        <Badge color={device.status === 'active' ? 'green' : 'red'} variant="light">
+                          {device.status}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>{t.cpu_load ? `${t.cpu_load}%` : 'N/A'}</Table.Td>
+                      <Table.Td>{gpuName}</Table.Td>
+                      <Table.Td>
+                        {t.gpu ? (
+                          <Group gap="xs">
+                            <Text size="sm">{gpuLoad}%</Text>
+                            {/* Visual Progress Bar for the "Cool Factor" */}
+                            <div style={{ width: 100, height: 8, backgroundColor: '#eee', borderRadius: 4 }}>
+                              <div style={{ width: `${gpuLoad}%`, height: '100%', backgroundColor: gpuLoad > 80 ? 'red' : 'green', borderRadius: 4 }} />
+                            </div>
+                          </Group>
+                        ) : 'N/A'}
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Paper>
+      </Container>
+    );
+  };
 
   return (
     <>

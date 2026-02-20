@@ -98,6 +98,22 @@ def register_provider():
              print(f"Response Detail: {e.response.text}")
         exit(1)
 
+def send_heartbeat():
+    """Sends live telemetry to the Orchestrator."""
+    url = f"{ORCHESTRATOR_URL}/provider/heartbeat"
+    telemetry = get_telemetry() # The function we added earlier
+    
+    payload = {
+        "provider_id": PROVIDER_ID,
+        "telemetry": telemetry
+    }
+    
+    try:
+        requests.post(url, json=payload, headers=headers)
+        # We don't print here to avoid spamming your terminal every 5 seconds
+    except Exception as e:
+        print(f"⚠️ Heartbeat failed: {e}")
+
 def update_task_status(task_id, status, logs=None, result_url=None):
     """Sends task updates back to the orchestrator"""
     url = f"{ORCHESTRATOR_URL}/provider/task_update"
@@ -119,103 +135,120 @@ def update_task_status(task_id, status, logs=None, result_url=None):
     except Exception as e:
         print(f"⚠️ Failed to update task status: {e}")
 
-# ... (rest of your polling logic) ...
-def poll_and_run():
-    """Main loop: Poll for tasks and execute them"""
+# ... (Keep your register_provider, send_heartbeat, get_telemetry, update_task_status functions as they are) ...
+
+def poll_for_task():
+    """Polls the orchestrator once for a task. Returns True if task ran, False otherwise."""
     url = f"{ORCHESTRATOR_URL}/provider/get_task"
     
-    while True:
-        try:
-            response = requests.post(url, json={"provider_id": PROVIDER_ID}, headers=headers)
-            data = response.json()
-            task = data.get("task")
+    try:
+        response = requests.post(url, json={"provider_id": PROVIDER_ID}, headers=headers)
+        data = response.json()
+        task = data.get("task")
 
-            if task:
-                task_id = task['task_id']
-                print(f"🚀 Assigned Task: {task_id}")
-                
-                # 1. Setup local temp workspace for this specific task
-                result_dir = tempfile.mkdtemp()
-                
-                try:
-                    # 2. Start the Docker Container
-                    container = client.containers.run(
-                        "runner:latest", 
-                        detach=True,
-                        environment={
-                            "PROJECT_URL": task.get('input_path'),
-                            "SCRIPT_PATH": task.get('script_path', 'main.py')
-                        },
-                        # Map /outputs inside container to our temp result_dir
-                        # It should match what the researcher uses!
-                        volumes={result_dir: {'bind': '/outputs', 'mode': 'rw'}}
-                    )
-                    
-                    update_task_status(task_id, "RUNNING")
+        if not task:
+            # print("💤 No tasks. Sleeping...") # We can silence this to keep logs clean
+            return False
 
-                    # 3. WAIT for the researcher's code to finish
-                    result = container.wait()
-                    logs = container.logs().decode('utf-8')
-                    
-                    if result['StatusCode'] == 0:
-                        print(f"✅ Container finished successfully.")
-                        
-                        # 4. Check for artifacts (models, plots, data) in /outputs
-                        result_url = None
-                        files = os.listdir(result_dir)
-                        
-                        if files:
-                            print(f"📦 Found {len(files)} result files. Uploading to R2...")
-                            # Zip the artifacts
-                            zip_name = f"results_{task_id}"
-                            archive_path = shutil.make_archive(zip_name, 'zip', result_dir)
-                            
-                            # Upload to R2 artifacts folder
-                            artifact_key = f"artifacts/{task_id}.zip"
-                            with open(f"{zip_name}.zip", 'rb') as f:
-                                s3_client.upload_fileobj(f, os.getenv('R2_BUCKET_NAME'), artifact_key)
-                            
-                            # Generate a long-term link for the researcher (7 days)
-                            result_url = s3_client.generate_presigned_url(
-                                'get_object', 
-                                Params={'Bucket': os.getenv('R2_BUCKET_NAME'), 'Key': artifact_key}, 
-                                ExpiresIn=604800
-                            )
-                            # Clean up the local zip file after upload
-                            os.remove(f"{zip_name}.zip")
-                            update_task_status(task_id, "COMPLETED", logs, result_url=result_url)
-
-                            # 5. Report success + logs + download link
-                            print(f"🎉 Task {task_id} fully processed.")
-                    
-                    else:
-                        print(f"❌ Task {task_id} Failed inside container.")
-                        print("-" * 40)
-                        print("DOCKER LOGS:")
-                        print(logs) # <--- ADD THIS LINE TO SEE THE ERROR
-                        print("-" * 40)
-                        update_task_status(task_id, "FAILED", logs)
-                    
-                    # 6. Cleanup container
-                    container.remove()
-
-                except Exception as docker_err:
-                    print(f"Docker/System Error: {docker_err}")
-                    # CRITICAL: If Docker fails to even start, we MUST tell the Orchestrator
-                    update_task_status(task_id, "FAILED", f"Provider System Error: {str(docker_err)}")
-                
-                finally:
-                    if os.path.exists(result_dir):
-                        shutil.rmtree(result_dir)
-
-            else:
-                print("💤 No tasks. Sleeping...")
-
-        except Exception as e:
-            print(f"Connection Error: {e}")
+        task_id = task['task_id']
+        print(f"🚀 Assigned Task: {task_id}")
         
-        time.sleep(HEARTBEAT_INTERVAL)
+        # 1. Setup local temp workspace for this specific task
+        result_dir = tempfile.mkdtemp()
+        
+        try:
+            # 2. Start the Docker Container
+            print("🐳 Booting Docker Container...")
+            container = client.containers.run(
+                "runner:latest", 
+                detach=True,
+                environment={
+                    "PROJECT_URL": task.get('input_path'),
+                    "SCRIPT_PATH": task.get('script_path', 'main.py')
+                },
+                volumes={result_dir: {'bind': '/outputs', 'mode': 'rw'}}
+            )
+            
+            update_task_status(task_id, "RUNNING")
 
+            # 3. WAIT for the researcher's code to finish
+            result = container.wait()
+            logs = container.logs().decode('utf-8')
+            
+            if result['StatusCode'] == 0:
+                print(f"✅ Container finished successfully.")
+                
+                # 4. Check for artifacts (models, plots, data) in /outputs
+                result_url = None
+                files = os.listdir(result_dir)
+                
+                if files:
+                    print(f"📦 Found {len(files)} result files. Uploading to R2...")
+                    zip_name = f"results_{task_id}"
+                    shutil.make_archive(zip_name, 'zip', result_dir)
+                    
+                    artifact_key = f"artifacts/{task_id}.zip"
+                    with open(f"{zip_name}.zip", 'rb') as f:
+                        s3_client.upload_fileobj(f, os.getenv('R2_BUCKET_NAME'), artifact_key)
+                    
+                    result_url = s3_client.generate_presigned_url(
+                        'get_object', 
+                        Params={'Bucket': os.getenv('R2_BUCKET_NAME'), 'Key': artifact_key}, 
+                        ExpiresIn=604800
+                    )
+                    os.remove(f"{zip_name}.zip")
+                    
+                update_task_status(task_id, "COMPLETED", logs, result_url=result_url)
+                print(f"🎉 Task {task_id} fully processed.")
+            
+            else:
+                print(f"❌ Task {task_id} Failed inside container.")
+                print("-" * 40)
+                print("DOCKER LOGS:")
+                print(logs) 
+                print("-" * 40)
+                update_task_status(task_id, "FAILED", logs)
+            
+            # 6. Cleanup container
+            container.remove()
+
+        except Exception as docker_err:
+            print(f"Docker/System Error: {docker_err}")
+            update_task_status(task_id, "FAILED", f"Provider System Error: {str(docker_err)}")
+        
+        finally:
+            if os.path.exists(result_dir):
+                shutil.rmtree(result_dir)
+                
+        return True # Task was executed
+
+    except Exception as e:
+        print(f"Connection Error: {e}")
+        return False
+
+# --- MAIN EXECUTION LOOP ---
 if __name__ == "__main__":
     register_provider()
-    poll_and_run()
+    print(f"📡 {PROVIDER_ID} is online and connected to {ORCHESTRATOR_URL}")
+    print("🔄 Listening for tasks and broadcasting telemetry...")
+    
+    last_heartbeat_time = 0
+    HEARTBEAT_INTERVAL_SECONDS = 5
+    POLL_INTERVAL_SECONDS = 10
+    
+    while True:
+        current_time = time.time()
+        
+        # 1. Fire Heartbeat if it's time
+        if current_time - last_heartbeat_time >= HEARTBEAT_INTERVAL_SECONDS:
+            send_heartbeat()
+            last_heartbeat_time = current_time
+            
+        # 2. Poll for Tasks
+        # We only check for tasks if we aren't currently running one.
+        # If poll_for_task() returns True, it means it spent time running a task.
+        task_executed = poll_for_task()
+        
+        # 3. Sleep to prevent CPU thrashing
+        if not task_executed:
+            time.sleep(1) # Short sleep so the heartbeat timer remains accurate
