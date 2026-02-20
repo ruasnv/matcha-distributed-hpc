@@ -47,7 +47,6 @@ s3_client = boto3.client(
 )
 
 def get_telemetry():
-    """Gathers real-time performance data."""
     cpu_usage = psutil.cpu_percent(interval=1)
     ram = psutil.virtual_memory()
     
@@ -58,22 +57,27 @@ def get_telemetry():
         "status": "idle"
     }
 
-    if HAS_GPU:
+    try:
+        pynvml.nvmlInit() # Ensure it's initialized inside the try block
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+        mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        
+        telemetry["gpu"] = {
+            "name": pynvml.nvmlDeviceGetName(handle),
+            "load": util.gpu,
+            "vram_used": round(mem.used / (1024**3), 2),
+            "vram_total": round(mem.total / (1024**3), 2)
+        }
+    except Exception as e:
+        # If GPU fails, we still return CPU telemetry so the UI shows SOMETHING
+        telemetry["gpu"] = None 
+        # print(f"GPU Info not available: {e}") 
+    finally:
         try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            temp = pynvml.nvmlDeviceGetTemperature(handle, 0)
-            
-            telemetry["gpu"] = {
-                "name": pynvml.nvmlDeviceGetName(handle),
-                "load": util.gpu,
-                "vram_used": round(mem.used / (1024**3), 2),
-                "vram_total": round(mem.total / (1024**3), 2),
-                "temp": temp
-            }
-        except Exception as e:
-            print(f"GPU Telemetry failed: {e}")
+            pynvml.nvmlShutdown()
+        except:
+            pass
             
     return telemetry
 
