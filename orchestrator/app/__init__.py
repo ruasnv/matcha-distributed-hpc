@@ -8,7 +8,7 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
-    CORS(app, origins=["https://matcha-kolektif-ui.onrender.com", "http://localhost:5173"])
+    CORS(app, origins=["https://matcha-ui.onrender.com", "http://localhost:5173"])
 
     # 1. Database URL Cleaning
     db_url = os.environ.get('DATABASE_URL')
