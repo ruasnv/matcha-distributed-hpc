@@ -35,6 +35,21 @@ def require_api_key(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@bp.route('/provider/my_devices', methods=['GET'])
+def get_my_devices():
+    clerk_id = request.args.get('clerk_id')
+    if not clerk_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    devices = Provider.query.filter_by(user_id=clerk_id).all()
+    
+    return jsonify([{
+        "id": d.id,
+        "name": d.name,
+        "status": d.status,
+        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+        "telemetry": d.last_telemetry # This is the "Live Pulse" we added
+    } for d in devices]), 200
 
 @bp.route('/consumer/upload_project', methods=['POST'])
 def upload_project():
