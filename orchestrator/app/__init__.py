@@ -8,7 +8,16 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
-    CORS(app, origins=["https://matcha-ui.onrender.com", "http://localhost:5173"])
+    CORS(app, resources={
+        r"/*": {
+            "origins": [
+                "https://matcha-ui.onrender.com",
+                "http://localhost:5173"
+            ],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-API-Key"]
+        }
+    })
 
     # 1. Database URL Cleaning
     db_url = os.environ.get('DATABASE_URL')
@@ -28,6 +37,8 @@ def create_app():
         SQLALCHEMY_DATABASE_URI=db_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SQLALCHEMY_ENGINE_OPTIONS={
+            "pool_pre_ping": True,  # 👈 The "Are you still there?" check
+            "pool_recycle": 280,
             "connect_args": {"sslmode": "require"} if db_url.startswith("postgresql") else {}
         }
     )
