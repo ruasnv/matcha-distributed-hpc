@@ -5,7 +5,7 @@ import uuid
 import json
 import os
 import secrets
-import boto3  # 👈 Fixed: Added missing import
+import boto3
 from botocore.config import Config
 from functools import wraps
 from .models import db, Provider, Task, User, EnrollmentToken
@@ -39,7 +39,6 @@ def require_api_key(f):
 
 @bp.route('/auth/generate_enrollment_token', methods=['POST'])
 def generate_token():
-    # 👈 Fixed: Kept only ONE version of this function
     data = request.get_json()
     clerk_id = data.get('clerk_id')
     
