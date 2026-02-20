@@ -44,6 +44,8 @@ def create_app():
 
     db.init_app(app)
 
+    from . import models
+
     with app.app_context():
         try:
             # This is the "safe" way to do it in production
