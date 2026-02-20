@@ -6,8 +6,8 @@ import json
 from .models import db, Provider, Task, User
 import os
 import secrets
-from .models import EnrollmentToken
-import boto3
+from datetime import datetime, timedelta
+from .models import db, Provider, Task, User, EnrollmentToken
 from botocore.config import Config
 from functools import wraps
 
