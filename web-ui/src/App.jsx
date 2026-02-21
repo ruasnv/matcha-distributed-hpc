@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Code, CopyButton, Tooltip, ActionIcon, List, AppShell, Burger, Group, NavLink, Text, Center, Loader, Stack, Title, Paper, Button, Badge, Divider, Container, Table } from '@mantine/core';
+import { Modal, Code, CopyButton, Tooltip, ActionIcon, List, AppShell, TextInput, Burger, Group, NavLink, Text, Center, Loader, Stack, Title, Paper, Button, Badge, Divider, Container, Table } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCopy, IconCheck, IconTerminal2, IconCpu, IconFlask, IconReceipt } from '@tabler/icons-react';
 import { SubmitForm } from './components/SubmitForm';
@@ -16,8 +16,8 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function App() {
-  const {isAuthorized, setIsAuthorized} = useState(false);
-  const {password, setPassword} = useState("");
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [password, setPassword] = useState("");
   if (!isAuthorized && import.meta.env.PROD) {
     return (
       <Center h="100vh" bg="gray.1">
@@ -101,8 +101,8 @@ export default function App() {
 
 const FleetDashboard = () => {
   const [devices, setDevices] = useState([]);
-  // Enrollment Modal States
-  const [opened, { open, close }] = useDisclosure(false);
+  // Rename these so they don't conflict with the sidebar's "opened" variable
+  const [enrollOpened, { open: openEnroll, close: closeEnroll }] = useDisclosure(false);
   const [token, setToken] = useState('');
   const [loadingToken, setLoadingToken] = useState(false);
 
@@ -136,7 +136,7 @@ const FleetDashboard = () => {
       });
       const data = await res.json();
       setToken(data.token);
-      open();
+      openEnroll();
     } catch (err) {
       console.error("Token generation failed", err);
     } finally {
@@ -166,7 +166,7 @@ const FleetDashboard = () => {
       </Group>
 
       {/* ENROLLMENT INSTRUCTIONS MODAL */}
-      <Modal opened={opened} onClose={close} title="Add New Compute Node" size="lg" radius="md">
+      <Modal opened={enrollOpened} onClose={closeEnroll} title="Add New Compute Node" size="lg" radius="md">
         <Text size="sm" mb="md" c="dimmed">
           Run these commands on the machine you want to add to the Kolektif.
         </Text>
@@ -355,4 +355,4 @@ return (
       </SignedIn>
     </>
   );
-} // <--- This closes the main App function!
+}

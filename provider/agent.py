@@ -12,26 +12,30 @@ from dotenv import load_dotenv
 import psutil
 import argparse
 import platform
+import uuid
+
+# --- 1. GLOBAL INITIALIZATION ---
+load_dotenv()
+
 try:
-    import pynvml # NVIDIA Management Library
+    import pynvml 
     pynvml.nvmlInit()
     HAS_GPU = True
 except:
     HAS_GPU = False
 
-# Load .env file if it exists
-load_dotenv()
+def get_unique_device_id():
+    node_id = hex(uuid.getnode()) 
+    return f"matcha-{node_id}"
 
 if not hasattr(wsgiref.headers.Headers, 'items'):
     wsgiref.headers.Headers.items = lambda self: self._headers
 
 # --- 1. Configuration ---
-# Fallback to the Render URL if the environment variable is missing
+PROVIDER_ID = os.getenv("PROVIDER_ID") or get_unique_device_id()
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "https://matcha-orchestrator.onrender.com")
-PROVIDER_ID = os.getenv("PROVIDER_ID", "ruya-laptop-wsl")
-API_KEY = "debug-provider-key"
-HEARTBEAT_INTERVAL = 10
-headers = {"X-API-Key": API_KEY}
+API_KEY = os.getenv("ORCHESTRATOR_API_KEY_PROVIDERS")
+headers = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 
 client = docker.from_env()
 
@@ -47,51 +51,96 @@ s3_client = boto3.client(
     )
 )
 
-# --- GLOBAL DYNAMIC GPU INITIALIZATION ---
-GPU_HANDLE = None
-GPU_NAME = "Unknown GPU" # Default
 # 1. SETUP ARGUMENTS
 parser = argparse.ArgumentParser()
 parser.add_argument("--enroll", help="The 6-digit token from your Matcha Dashboard")
 args = parser.parse_args()
 
-try:
-    pynvml.nvmlInit()
-    GPU_HANDLE = pynvml.nvmlDeviceGetHandleByIndex(0)
-    
-    # DYNAMIC DETECTION: Get the real name from the driver
-    name_raw = pynvml.nvmlDeviceGetName(GPU_HANDLE)
-    GPU_NAME = name_raw.decode('utf-8') if isinstance(name_raw, bytes) else str(name_raw)
-    
-    print(f"Dynamic Hardware Detection: Found {GPU_NAME}")
-except Exception as e:
-    print(f"GPU Detection skipped (CPU Only Mode): {e}")
+# --- 2. HARDWARE DETECTION ---
+GPU_HANDLE = None
+GPU_NAME = "Unknown GPU"
+
+if HAS_GPU:
+    try:
+        pynvml.nvmlInit()
+        GPU_HANDLE = pynvml.nvmlDeviceGetHandleByIndex(0)
+        name_raw = pynvml.nvmlDeviceGetName(GPU_HANDLE)
+        GPU_NAME = name_raw.decode('utf-8') if isinstance(name_raw, bytes) else str(name_raw)
+        print(f"Dynamic Hardware Detection: Found {GPU_NAME}")
+    except Exception as e:
+        print(f"GPU Initialization failed: {e}")
+        HAS_GPU = False
+
+def get_gpu_specs():
+    gpus = []
+    if not HAS_GPU: return gpus
+    try:
+        device_count = pynvml.nvmlDeviceGetCount()
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            name_raw = pynvml.nvmlDeviceGetName(handle)
+            name = name_raw.decode('utf-8') if isinstance(name_raw, bytes) else str(name_raw)
+            gpus.append({"id": f"gpu_{i}", "name": name, "status": "idle"})
+    except:
+        pass
+    return gpus
+
+# --- 3. ENROLLMENT & STORAGE ---
+def save_credentials(user_id):
+    # 'a' for append, but check if we should overwrite instead to avoid duplicates
+    with open(".env", "a") as f:
+        f.write(f"\nUSER_ID={user_id}")
+        f.write(f"\nPROVIDER_ID={PROVIDER_ID}")
+    print(f"📝 Credentials saved. ID: {PROVIDER_ID}")
+
+def get_unique_device_id():
+    # This creates a unique ID based on the hardware (MAC address)
+    # It will stay the same for this specific laptop forever.
+    node_id = hex(uuid.getnode()) 
+    return f"matcha-{node_id}"
 
 def enroll_device(token):
-    print(f"Attempting to link this device to your Matcha account...")
-    
-    # We send the token to the backend to get our USER_ID
-    # This is much safer than hardcoding it!
-    response = requests.post(f"{ORCHESTRATOR_URL}/provider/enroll", json={
-        "token": token,
-        "provider_id": PROVIDER_ID
-    })
-    
-    if response.status_code == 200:
-        assigned_user_id = response.json().get('user_id')
-        print(f"Success! Device linked to User: {assigned_user_id}")
-        return assigned_user_id
-    else:
-        print(f"Enrollment failed: {response.json().get('error')}")
+    print(f"🔑 Linking device {PROVIDER_ID} to Matcha Kolektif...")
+    try:
+        res = requests.post(
+            f"{ORCHESTRATOR_URL}/provider/enroll", 
+            json={"token": token, "provider_id": PROVIDER_ID},
+            headers=headers
+        )
+        if res.status_code == 200:
+            uid = res.json().get('user_id')
+            save_credentials(uid)
+            print(f"✅ Enrollment complete! Please restart the agent.")
+            exit(0)
+        else:
+            print(f"❌ Error: {res.json().get('error')}")
+            exit(1)
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
         exit(1)
 
-# 2. RUNTIME LOGIC
-current_user_id = os.getenv("USER_ID") # Try to get from local .env
+ # --- 4. NETWORKING ---
+def register_provider():
+    url = f"{ORCHESTRATOR_URL}/provider/register"
+    
+    # FIX: Use your dynamic function here!
+    gpu_list = get_gpu_specs()
+    
+    payload = {
+        "provider_id": PROVIDER_ID,
+        "user_id": os.getenv("USER_ID"),
+        "hardware_specs": get_telemetry(),
+        "gpus": gpu_list 
+    }
+    
+    try:
+        res = requests.post(url, json=payload, headers=headers)
+        res.raise_for_status()
+        print(f"🚀 Online as {PROVIDER_ID} ({GPU_NAME})")
+    except Exception as e:
+        print(f"❌ Registration failed. Detail: {e}")
+        exit(1)
 
-if args.enroll:
-    current_user_id = enroll_device(args.enroll)
-    # OPTIONAL: Save current_user_id to a local .env file so you don't have to enroll again
-        
 def get_telemetry():
     cpu_usage = psutil.cpu_percent(interval=1)
     ram = psutil.virtual_memory()
@@ -120,27 +169,6 @@ def get_telemetry():
             telemetry["gpu"] = {"name": GPU_NAME, "load": 0, "status": "offline"}
             
     return telemetry
-
-def register_provider():
-    """Register this machine as a worker on the network"""
-    url = f"{ORCHESTRATOR_URL}/provider/register"
-    print(f"📡 Attempting to register at: {url}")
-    
-    payload = {
-        "provider_id": PROVIDER_ID,
-        "gpus": [{"id": "cpu_0", "name": "Standard Worker", "status": "idle"}]
-    }
-    
-    try:
-        res = requests.post(url, json=payload, headers=headers)
-        res.raise_for_status()
-        print(f"Registered successfully as {PROVIDER_ID}")
-    except Exception as e:
-        print(f"Registration failed: {e}")
-        # Don't exit immediately; let's see the error detail
-        if hasattr(e, 'response') and e.response is not None:
-             print(f"Response Detail: {e.response.text}")
-        exit(1)
 
 def send_heartbeat():
     """Sends live telemetry to the Orchestrator."""
@@ -178,8 +206,6 @@ def update_task_status(task_id, status, logs=None, result_url=None):
         print(f"Status updated: {status} for Task {task_id}")
     except Exception as e:
         print(f"Failed to update task status: {e}")
-
-# ... (Keep your register_provider, send_heartbeat, get_telemetry, update_task_status functions as they are) ...
 
 def poll_for_task():
     """Polls the orchestrator once for a task. Returns True if task ran, False otherwise."""
@@ -272,27 +298,27 @@ def poll_for_task():
 
 # --- MAIN EXECUTION LOOP ---
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--enroll", help="The 6-digit token from your Matcha Dashboard")
+    args = parser.parse_args()
+
+    if args.enroll:
+        enroll_device(args.enroll)
+    
+    if not os.getenv("USER_ID"):
+        print("Error: USER_ID not set. Please run: python agent.py --enroll <token>")
+        exit(1)
+
     register_provider()
-    print(f"{PROVIDER_ID} is online and connected to {ORCHESTRATOR_URL}")
-    print("Listening for tasks and broadcasting telemetry...")
     
     last_heartbeat_time = 0
-    HEARTBEAT_INTERVAL_SECONDS = 5
-    POLL_INTERVAL_SECONDS = 10
     
     while True:
         current_time = time.time()
         
         # 1. Fire Heartbeat if it's time
-        if current_time - last_heartbeat_time >= HEARTBEAT_INTERVAL_SECONDS:
+        if current_time - last_heartbeat_time >= 5: # Every 5 seconds
             send_heartbeat()
             last_heartbeat_time = current_time
-            
-        # 2. Poll for Tasks
-        # We only check for tasks if we aren't currently running one.
-        # If poll_for_task() returns True, it means it spent time running a task.
-        task_executed = poll_for_task()
-        
-        # 3. Sleep to prevent CPU thrashing
-        if not task_executed:
-            time.sleep(1) # Short sleep so the heartbeat timer remains accurate
+        poll_for_task()
+        time.sleep(1)
