@@ -25,6 +25,7 @@ class Provider(db.Model):
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     address = db.Column(db.String(255), nullable=True)
     last_telemetry = db.Column(db.JSON, nullable=True)
+    specs = db.Column(db.JSON)
 
 class EnrollmentToken(db.Model):
     __tablename__ = 'enrollment_tokens'

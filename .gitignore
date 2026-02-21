@@ -16,4 +16,6 @@ instance/
 
 # IDE and editor folders
 .vscode/
-.idea/
+.idea/.env
+__pycache__/
+venv/

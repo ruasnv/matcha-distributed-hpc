@@ -160,23 +160,29 @@ def sync_user():
 
 # --- Provider Management ---
 @bp.route('/provider/register', methods=['POST'])
-@require_api_key # Added security
+@require_api_key
 def provider_register():
     data = request.get_json()
     provider_id = data.get('provider_id')
+    
+    # hardware_specs contains the dictionary from get_telemetry()
     specs = data.get('hardware_specs', {}) 
     
-    provider = Provider.query.get(provider_id)
+    # IMPORTANT: The agent now sends a list of GPUs separately
+    # We should prioritize that list if it exists
+    detected_gpus = data.get('gpus', [])
     
-    # We still want to maintain a 'gpus' list for the task-matching logic
-    # Let's extract it from the specs we got from the agent
-    detected_gpus = []
-    if "gpu" in specs:
+    # Fallback: if 'gpus' is empty, try to extract from 'specs' (legacy/telemetry)
+    if not detected_gpus and "gpu" in specs and specs["gpu"]:
         detected_gpus = [{"id": "gpu-0", "name": specs["gpu"]["name"], "status": "idle"}]
 
+    provider = Provider.query.get(provider_id)
+    
     if provider:
         provider.specs = specs
-        provider.gpus = jsonpickle.encode(detected_gpus, unpicklable=False) # Keep legacy logic happy
+        # We store the list as a JSON string for the matching logic
+        provider.gpus = jsonpickle.encode(detected_gpus, unpicklable=False)
+        provider.user_id = data.get('user_id') # Update user_id just in case
         provider.last_seen = datetime.utcnow()
         provider.status = 'active'
     else:
@@ -191,8 +197,12 @@ def provider_register():
         )
         db.session.add(provider)
     
-    db.session.commit()
-    return jsonify({"message": "Successfully registered"}), 200
+    try:
+        db.session.commit()
+        return jsonify({"message": "Successfully registered"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
         
 @bp.route('/provider/task_update', methods=['POST'])
