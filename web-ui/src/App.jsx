@@ -16,6 +16,36 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function App() {
+  const {isAuthorized, setIsAuthorized} = useState(false);
+  const {password, setPassword} = useState("");
+  if (!isAuthorized && import.meta.env.PROD) {
+    return (
+      <Center h="100vh" bg="gray.1">
+        <Paper withBorder p="xl" radius="md" shadow="md" w={350}>
+          <Stack>
+            <Title order={3}>Matcha Private Beta</Title>
+            <Text size="sm" c="dimmed">Enter developer password to access the Kolektif.</Text>
+            <TextInput 
+              type="password" 
+              placeholder="Password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Button 
+              color="green" 
+              onClick={() => {
+                if (password === "Kolektif2026!") setIsAuthorized(true);
+                else alert("Access Denied");
+              }}
+            >
+              Enter System
+            </Button>
+          </Stack>
+        </Paper>
+      </Center>
+    );
+  }
+
   const { isLoaded, isSignedIn, user } = useUser();
   const [opened, { toggle }] = useDisclosure();
   const [activePage, setActivePage] = useState('dashboard');

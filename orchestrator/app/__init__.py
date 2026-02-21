@@ -56,7 +56,6 @@ def create_app():
             # we just log it and move on instead of crashing.
             print(f" Database initialization note: {e}")    
 
-    # --- THE FIXES ARE BELOW ---
 
     @app.before_request
     def check_api_key():

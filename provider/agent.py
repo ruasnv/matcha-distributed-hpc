@@ -50,9 +50,9 @@ s3_client = boto3.client(
 # --- GLOBAL DYNAMIC GPU INITIALIZATION ---
 GPU_HANDLE = None
 GPU_NAME = "Unknown GPU" # Default
-# 1. Parse the command line for the token
+# 1. SETUP ARGUMENTS
 parser = argparse.ArgumentParser()
-parser.add_argument("--enroll", help="The enrollment token from the Matcha UI")
+parser.add_argument("--enroll", help="The 6-digit token from your Matcha Dashboard")
 args = parser.parse_args()
 
 try:
@@ -63,25 +63,34 @@ try:
     name_raw = pynvml.nvmlDeviceGetName(GPU_HANDLE)
     GPU_NAME = name_raw.decode('utf-8') if isinstance(name_raw, bytes) else str(name_raw)
     
-    print(f"✅ Dynamic Hardware Detection: Found {GPU_NAME}")
+    print(f"Dynamic Hardware Detection: Found {GPU_NAME}")
 except Exception as e:
-    print(f"⚠️ GPU Detection skipped (CPU Only Mode): {e}")
+    print(f"GPU Detection skipped (CPU Only Mode): {e}")
 
-def run_enrollment(token):
-    print(f"🔑 Attempting to enroll with token: {token}...")
-    res = requests.post(f"{ORCHESTRATOR_URL}/provider/enroll", json={
+def enroll_device(token):
+    print(f"Attempting to link this device to your Matcha account...")
+    
+    # We send the token to the backend to get our USER_ID
+    # This is much safer than hardcoding it!
+    response = requests.post(f"{ORCHESTRATOR_URL}/provider/enroll", json={
         "token": token,
         "provider_id": PROVIDER_ID
     })
     
-    if res.status_code == 200:
-        user_id = res.json().get('user_id')
-        # Save this user_id to a local .env or config file so it's remembered!
-        print(f"✅ Successfully linked to account: {user_id}")
-        return user_id
+    if response.status_code == 200:
+        assigned_user_id = response.json().get('user_id')
+        print(f"Success! Device linked to User: {assigned_user_id}")
+        return assigned_user_id
     else:
-        print(f"❌ Enrollment failed: {res.json().get('error')}")
+        print(f"Enrollment failed: {response.json().get('error')}")
         exit(1)
+
+# 2. RUNTIME LOGIC
+current_user_id = os.getenv("USER_ID") # Try to get from local .env
+
+if args.enroll:
+    current_user_id = enroll_device(args.enroll)
+    # OPTIONAL: Save current_user_id to a local .env file so you don't have to enroll again
         
 def get_telemetry():
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -101,7 +110,7 @@ def get_telemetry():
             mem = pynvml.nvmlDeviceGetMemoryInfo(GPU_HANDLE)
             
             telemetry["gpu"] = {
-                "name": GPU_NAME, # 👈 Using the dynamically detected name
+                "name": GPU_NAME,
                 "load": int(util.gpu),
                 "vram_used": round(mem.used / (1024**3), 2),
                 "vram_total": round(mem.total / (1024**3), 2)
@@ -125,9 +134,9 @@ def register_provider():
     try:
         res = requests.post(url, json=payload, headers=headers)
         res.raise_for_status()
-        print(f"✅ Registered successfully as {PROVIDER_ID}")
+        print(f"Registered successfully as {PROVIDER_ID}")
     except Exception as e:
-        print(f"❌ Registration failed: {e}")
+        print(f"Registration failed: {e}")
         # Don't exit immediately; let's see the error detail
         if hasattr(e, 'response') and e.response is not None:
              print(f"Response Detail: {e.response.text}")
@@ -147,7 +156,7 @@ def send_heartbeat():
         requests.post(url, json=payload, headers=headers)
         # We don't print here to avoid spamming your terminal every 5 seconds
     except Exception as e:
-        print(f"⚠️ Heartbeat failed: {e}")
+        print(f"Heartbeat failed: {e}")
 
 def update_task_status(task_id, status, logs=None, result_url=None):
     """Sends task updates back to the orchestrator"""
@@ -166,9 +175,9 @@ def update_task_status(task_id, status, logs=None, result_url=None):
     try:
         res = requests.post(url, json=payload, headers=headers)
         res.raise_for_status()
-        print(f"📊 Status updated: {status} for Task {task_id}")
+        print(f"Status updated: {status} for Task {task_id}")
     except Exception as e:
-        print(f"⚠️ Failed to update task status: {e}")
+        print(f"Failed to update task status: {e}")
 
 # ... (Keep your register_provider, send_heartbeat, get_telemetry, update_task_status functions as they are) ...
 
@@ -186,14 +195,14 @@ def poll_for_task():
             return False
 
         task_id = task['task_id']
-        print(f"🚀 Assigned Task: {task_id}")
+        print(f"Assigned Task: {task_id}")
         
         # 1. Setup local temp workspace for this specific task
         result_dir = tempfile.mkdtemp()
         
         try:
             # 2. Start the Docker Container
-            print("🐳 Booting Docker Container...")
+            print("Booting Docker Container...")
             container = client.containers.run(
                 "runner:latest", 
                 detach=True,
@@ -211,14 +220,14 @@ def poll_for_task():
             logs = container.logs().decode('utf-8')
             
             if result['StatusCode'] == 0:
-                print(f"✅ Container finished successfully.")
+                print(f"Container finished successfully.")
                 
                 # 4. Check for artifacts (models, plots, data) in /outputs
                 result_url = None
                 files = os.listdir(result_dir)
                 
                 if files:
-                    print(f"📦 Found {len(files)} result files. Uploading to R2...")
+                    print(f"Found {len(files)} result files. Uploading to R2...")
                     zip_name = f"results_{task_id}"
                     shutil.make_archive(zip_name, 'zip', result_dir)
                     
@@ -234,10 +243,10 @@ def poll_for_task():
                     os.remove(f"{zip_name}.zip")
                     
                 update_task_status(task_id, "COMPLETED", logs, result_url=result_url)
-                print(f"🎉 Task {task_id} fully processed.")
+                print(f"Task {task_id} fully processed.")
             
             else:
-                print(f"❌ Task {task_id} Failed inside container.")
+                print(f"Task {task_id} Failed inside container.")
                 print("-" * 40)
                 print("DOCKER LOGS:")
                 print(logs) 
@@ -264,8 +273,8 @@ def poll_for_task():
 # --- MAIN EXECUTION LOOP ---
 if __name__ == "__main__":
     register_provider()
-    print(f"📡 {PROVIDER_ID} is online and connected to {ORCHESTRATOR_URL}")
-    print("🔄 Listening for tasks and broadcasting telemetry...")
+    print(f"{PROVIDER_ID} is online and connected to {ORCHESTRATOR_URL}")
+    print("Listening for tasks and broadcasting telemetry...")
     
     last_heartbeat_time = 0
     HEARTBEAT_INTERVAL_SECONDS = 5
