@@ -198,7 +198,7 @@ const FleetDashboard = () => {
             <Code block color="dark.6" c="green.4" style={{ border: '1px solid #333' }}>
               {enrollCommand}
             </Code>
-            <Text size="xs" mt="xs" c="orange.4">⚠️ Token expires in 15 minutes.</Text>
+            <Text size="xs" mt="xs" c="orange.4">Token expires in 15 minutes.</Text>
           </Paper>
         </Stack>
 
