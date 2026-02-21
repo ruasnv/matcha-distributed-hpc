@@ -17,7 +17,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function App() {
   const { isLoaded, isSignedIn, user } = useUser();
-  const [ opened, { open, close }] = useDisclosure(false);
+  const [opened, { toggle }] = useDisclosure();
   const [activePage, setActivePage] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
 
@@ -239,4 +239,90 @@ const FleetDashboard = () => {
       </Paper>
     </Container>
   );
-};}
+};
+return (
+    <>
+      <SignedOut>
+        <Center h="100vh">
+          <Stack align="center">
+            <Title>Kolektif Network</Title>
+            <Text c="dimmed">Distributed Compute for ML Research</Text>
+            <SignInButton mode="modal" />
+          </Stack>
+        </Center>
+      </SignedOut>
+
+      <SignedIn>
+        <AppShell
+          header={{ height: 60 }}
+          navbar={{ width: 280, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+          padding="md"
+        >
+          {/* TOP HEADER */}
+          <AppShell.Header>
+            <Group h="100%" px="md" justify="space-between">
+              <Group>
+                <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+                <Title order={3} variant="gradient" gradient={{ from: 'green', to: 'lime', deg: 90 }}>
+                  Matcha Kolektif
+                </Title>
+              </Group>
+              <Group>
+                <UserButton afterSignOutUrl="/" />
+              </Group>
+            </Group>
+          </AppShell.Header>
+
+          {/* SIDEBAR NAVIGATION */}
+          <AppShell.Navbar p="md">
+            <Text size="xs" fw={500} c="dimmed" mb="sm">MAIN MENU</Text>
+            
+            <NavLink 
+              label="Research Tasks" 
+              leftSection={<IconFlask size="1.2rem" stroke={1.5} />} 
+              active={activePage === 'dashboard'}
+              onClick={() => setActivePage('dashboard')}
+              variant="filled"
+              color="green"
+              mb={4}
+              style={{ borderRadius: '8px' }}
+            />
+            
+            <NavLink 
+              label="Device Fleet" 
+              leftSection={<IconCpu size="1.2rem" stroke={1.5} />} 
+              active={activePage === 'fleet'}
+              onClick={() => setActivePage('fleet')}
+              variant="filled"
+              color="green"
+              mb={4}
+              style={{ borderRadius: '8px' }}
+            />
+
+            <NavLink 
+              label="Trust Ledger" 
+              leftSection={<IconReceipt size="1.2rem" stroke={1.5} />} 
+              active={activePage === 'ledger'}
+              onClick={() => setActivePage('ledger')}
+              variant="filled"
+              color="green"
+              style={{ borderRadius: '8px' }}
+            />
+          </AppShell.Navbar>
+
+          {/* MAIN CONTENT AREA */}
+          <AppShell.Main bg="#f8f9fa">
+            {activePage === 'dashboard' && <ResearchDashboard />}
+            {activePage === 'fleet' && <FleetDashboard />}
+            {activePage === 'ledger' && (
+              <Container size="lg" py="md">
+                <Title order={2}>Blockchain Ledger</Title>
+                <Text c="dimmed">Immutable history of network events will appear here.</Text>
+              </Container>
+            )}
+          </AppShell.Main>
+        </AppShell>
+      </SignedIn>
+    </>
+  );
+} // <--- This closes the main App function!
