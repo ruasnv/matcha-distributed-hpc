@@ -88,32 +88,48 @@ export function SubmitForm() {
   };
 
   return (
-    <Paper withBorder p="xl" radius="md" shadow="sm">
-      <Stack>
-        <Title order={4}>Deploy Research Code</Title>
-        <FileInput 
-          label="Research Script or ZIP" 
-          placeholder="Click to browse" 
-          value={file}
-          onChange={setFile} 
-          required
-        />
-        <TextInput 
-          label="Entry Point Script"
-          value={entryPoint}
-          onChange={(e) => setEntryPoint(e.target.value)}
-        />
-        <Button 
-            onClick={handleUploadAndSubmit} 
-            loading={uploading} 
-            fullWidth 
-            color="green"
-            // We only enable if a file is in state
-            variant={file ? "filled" : "light"}
-        >
-          {file ? `Zip & Run ${file.name}` : "Select a File First"}
-        </Button>
-      </Stack>
-    </Paper>
-  );
+  <Paper withBorder p="xl" radius="md" shadow="sm">
+    <Stack>
+      <Title order={4}>Deploy Research Code</Title>
+      
+      {/* 1. DEBUG LABEL: If this says "No file", the UI will never change */}
+      <Text size="xs" c={file ? "green" : "red"} fw={700}>
+        STATE STATUS: {file ? `File Ready (${file.name})` : "No file in state"}
+      </Text>
+
+      <FileInput 
+        key="matcha-file-input" 
+        label="Research Script or ZIP" 
+        placeholder="Click to browse" 
+        value={file} 
+        onChange={(payload) => {
+          console.log("🔥 onChange payload:", payload);
+          if (payload) {
+            setFile(payload);
+          }
+        }} 
+        required
+      />
+      
+      <TextInput 
+        label="Entry Point Script"
+        value={entryPoint}
+        onChange={(e) => setEntryPoint(e.target.value)}
+      />
+
+      <Button 
+        onClick={() => {
+            console.log("Submit button actually clicked. File in state is:", file);
+            handleUploadAndSubmit();
+        }} 
+        loading={uploading} 
+        fullWidth 
+        color={file !== null ? "green" : "gray"}
+        disabled={file === null}
+    >
+      {file !== null ? `Run ${file.name} on Network` : "Select a File First"}
+    </Button>
+    </Stack>
+  </Paper>
+);
 }
