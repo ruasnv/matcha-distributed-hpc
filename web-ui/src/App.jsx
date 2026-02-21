@@ -4,8 +4,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconCopy, IconCheck, IconTerminal2, IconCpu, IconFlask, IconReceipt } from '@tabler/icons-react';
 import { SubmitForm } from './components/SubmitForm';
 import { TaskTable } from './components/TaskTable';
-import { 
-  isSignedIn,
+import {
   SignedIn, 
   SignedOut, 
   SignInButton, 
@@ -31,7 +30,7 @@ const ResearchDashboard = ({ tasks }) => (
   </Container>
 );
 
-const FleetDashboard = () => {
+const FleetDashboard = ({ isSignedIn, user }) => { 
   const [devices, setDevices] = useState([]);
   // Using a specific name for enrollment modal to avoid conflicts
   const [enrollOpened, { open: openEnroll, close: closeEnroll }] = useDisclosure(false);
@@ -257,7 +256,9 @@ export default function App() {
          <AppShell.Main bg="#f8f9fa">
           {/* 2. Pass the state down to the component here */}
           {activePage === 'dashboard' && <ResearchDashboard tasks={tasks} />}
-          {activePage === 'fleet' && <FleetDashboard />}
+          {activePage === 'fleet' && (
+            <FleetDashboard isSignedIn={isSignedIn} user={user} />
+          )}
         </AppShell.Main>
         </AppShell>
       </SignedIn>
