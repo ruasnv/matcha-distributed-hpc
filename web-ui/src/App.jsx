@@ -5,6 +5,7 @@ import { IconCopy, IconCheck, IconTerminal2, IconCpu, IconFlask, IconReceipt } f
 import { SubmitForm } from './components/SubmitForm';
 import { TaskTable } from './components/TaskTable';
 import { 
+  isSignedIn,
   SignedIn, 
   SignedOut, 
   SignInButton, 
