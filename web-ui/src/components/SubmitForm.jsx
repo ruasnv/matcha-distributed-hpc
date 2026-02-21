@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TextInput, Button, Stack, Title, Paper, FileInput } from '@mantine/core';
 import JSZip from 'jszip';
 import { useUser } from '@clerk/clerk-react';
 
-// Use the environment variable so it works on both Local and Render
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// Use the environment variable so it works  Render
+const API_URL = import.meta.env.VITE_API_URL;
 const CONSUMER_API_KEY = "ultrasecretconsumerkey456"; 
 
 export function SubmitForm() {
@@ -13,17 +13,29 @@ export function SubmitForm() {
   const [uploading, setUploading] = useState(false);
   const [entryPoint, setEntryPoint] = useState('main.py');
 
+  // DEBUG: Track if the file is actually being captured
+  useEffect(() => {
+    if (file) {
+      console.log("📂 File captured by React:", file.name, "(", file.size, "bytes )");
+    }
+  }, [file]);
+
   const handleUploadAndSubmit = async () => {
-    if (!file || !user) {
-      alert("Please select a file and ensure you are signed in.");
+    console.log("Button Clicked!"); // If you don't see this, the button logic is broken
+
+    if (!user || !user.id) {
+        alert("Wait a second! Clerk is still loading your user profile. Try again in a moment.");
+        return;
+    }
+    
+    if (!file) {
+      alert("Please select a file first.");
       return;
     }
     
     setUploading(true);
-    console.log("🚀 Starting deployment process...");
 
     try {
-      // 1. Create/Validate the Zip
       const zip = new JSZip();
       if (file.name.endsWith('.zip')) {
         await zip.loadAsync(file);
@@ -33,47 +45,43 @@ export function SubmitForm() {
       
       const zipBlob = await zip.generateAsync({ type: 'blob' });
 
-      // 2. Upload to R2 via Orchestrator
       const formData = new FormData();
       formData.append('file', zipBlob, 'project.zip'); 
-      formData.append('clerk_id', user.id); 
+      formData.append('clerk_id', user.id);
+
+      console.log("📡 Sending to:", `${API_URL}/consumer/upload_project`);
 
       const uploadRes = await fetch(`${API_URL}/consumer/upload_project`, {
         method: 'POST',
-        headers: { 'X-API-Key': CONSUMER_API_KEY }, // Added your security key
+        headers: { 'X-API-Key': CONSUMER_API_KEY },
         body: formData
       });
 
-      if (!uploadRes.ok) {
-        const errorData = await uploadRes.json();
-        throw new Error(errorData.error || 'Upload failed');
-      }
+      if (!uploadRes.ok) throw new Error('R2 Upload failed');
 
       const { project_url } = await uploadRes.json();
-      console.log("📂 File uploaded to R2:", project_url);
       
-      // 3. Submit the Task to the Queue
       const submitRes = await fetch(`${API_URL}/consumer/submit_task`, {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
-            'X-API-Key': CONSUMER_API_KEY // Added your security key
+            'X-API-Key': CONSUMER_API_KEY 
         },
         body: JSON.stringify({
           clerk_id: user.id,
           input_path: project_url,
-          docker_image: 'runner:latest', // Matches the image name we built
+          docker_image: 'runner:latest',
           script_path: entryPoint 
         })
       });
 
-      if (!submitRes.ok) throw new Error('Task submission failed');
+      if (!submitRes.ok) throw new Error('Task Queueing failed');
 
-      alert("🚀 Research task deployed to the Kolektif!");
-      setFile(null); // Reset form
+      alert("🚀 Task is now in the global queue!");
+      setFile(null);
     } catch (err) {
-      console.error("Deployment Error:", err);
-      alert("Deployment Error: " + err.message);
+      console.error("Critical Error:", err);
+      alert(err.message);
     } finally {
       setUploading(false);
     }
@@ -85,15 +93,13 @@ export function SubmitForm() {
         <Title order={4}>Deploy Research Code</Title>
         <FileInput 
           label="Research Script or ZIP" 
-          description="Select a .py file or a .zip project"
-          placeholder="e.g. main.py" 
+          placeholder="Click to browse" 
           value={file}
           onChange={setFile} 
           required
         />
         <TextInput 
           label="Entry Point Script"
-          description="The script the agent should execute"
           value={entryPoint}
           onChange={(e) => setEntryPoint(e.target.value)}
         />
@@ -102,9 +108,10 @@ export function SubmitForm() {
             loading={uploading} 
             fullWidth 
             color="green"
-            disabled={!file}
+            // We only enable if a file is in state
+            variant={file ? "filled" : "light"}
         >
-          Zip & Run on Network
+          {file ? `Zip & Run ${file.name}` : "Select a File First"}
         </Button>
       </Stack>
     </Paper>
