@@ -42,8 +42,6 @@ def get_auth_headers():
         "Content-Type": "application/json"
     }
 
-client = docker.from_env()
-
 # S3/R2 Setup
 s3_client = boto3.client(
     's3',
@@ -67,6 +65,14 @@ if HAS_GPU:
     except Exception as e:
         print(f"⚠️ GPU Initialization failed: {e}")
         HAS_GPU = False
+
+def get_docker_client():
+    try:
+        return docker.from_env()
+    except Exception as e:
+        print(f"❌ Docker Error: Could not connect to Docker. Is Docker Desktop running?")
+        print(f"Error detail: {e}")
+        exit(1)
 
 def get_gpu_specs():
     gpus = []
@@ -177,6 +183,7 @@ def update_task_status(task_id, status, logs=None, result_url=None):
 
 def poll_for_task():
     url = f"{ORCHESTRATOR_URL}/provider/get_task"
+    docker_client = get_docker_client()
     try:
         response = requests.post(url, json={"provider_id": PROVIDER_ID}, headers=get_auth_headers())
         data = response.json()
@@ -189,7 +196,7 @@ def poll_for_task():
         
         try:
             print("🏗️ Booting Docker Runner...")
-            container = client.containers.run(
+            container = docker_client.containers.run(
                 "runner:latest", 
                 detach=True,
                 environment={

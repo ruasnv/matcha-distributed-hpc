@@ -162,10 +162,21 @@ export default function App() {
         </Group>
 
         <Modal opened={enrollOpened} onClose={closeEnroll} title="Add New Compute Node" size="lg" radius="md">
-          <Text size="sm" mb="md" c="dimmed">Run these commands on the provider machine.</Text>
+          <Text size="sm" mb="md" c="dimmed">
+            Run these commands on the machine you want to add to the Kolektif.
+          </Text>
+
           <Stack gap="md">
-            <Paper withBorder p="xs" bg="gray.0"><Code block>git clone https://github.com/ruasnv/matcha-distributed-hpc.git</Code></Paper>
-            <Paper withBorder p="xs" bg="gray.0"><Code block>pip install -r requirements.txt</Code></Paper>
+            <Paper withBorder p="xs" bg="gray.0">
+              <Text size="xs" fw={700} mb={5} c="dimmed">1. GET THE AGENT</Text>
+              {/* Updated Git Link */}
+              <Code block>git clone https://github.com/ruasnv/matcha-agent.git && cd matcha-agent</Code>
+            </Paper>
+
+            <Paper withBorder p="xs" bg="gray.0">
+              <Text size="xs" fw={700} mb={5} c="dimmed">2. SETUP ENVIRONMENT</Text>
+              <Code block>pip install -r requirements.txt</Code>
+            </Paper>
             <Paper withBorder p="xs" bg="dark.7" c="white">
               <Group justify="space-between">
                 <Text size="xs" fw={700}>3. RUN ENROLLMENT</Text>
