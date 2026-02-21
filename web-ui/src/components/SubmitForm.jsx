@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TextInput, Button, Stack, Title, Paper, FileInput, Text as MantineText } from '@mantine/core';
+import { TextInput, Button, Stack, Title, Paper, FileInput, Group, Text as MantineText } from '@mantine/core';
 import JSZip from 'jszip';
 import { useUser } from '@clerk/clerk-react';
 
