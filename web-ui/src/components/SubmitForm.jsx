@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TextInput, Button, Stack, Title, Paper, FileInput } from '@mantine/core';
+import { TextInput, Button, Stack, Title, Paper, FileInput, Text as MantineText} from '@mantine/core';
 import JSZip from 'jszip';
 import { useUser } from '@clerk/clerk-react';
 
@@ -93,9 +93,9 @@ export function SubmitForm() {
       <Title order={4}>Deploy Research Code</Title>
       
       {/* 1. DEBUG LABEL: If this says "No file", the UI will never change */}
-      <Text size="xs" c={file ? "green" : "red"} fw={700}>
+      <MantineText size="xs" c={file ? "green" : "red"} fw={700}>
         STATE STATUS: {file ? `File Ready (${file.name})` : "No file in state"}
-      </Text>
+      </MantineText>
 
       <FileInput 
         key="matcha-file-input" 

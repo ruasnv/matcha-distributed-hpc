@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Code, CopyButton, Tooltip, ActionIcon, List, AppShell, TextInput, Burger, Group, NavLink, Text, Center, Loader, Stack, Title, Paper, Button, Badge, Divider, Container, Table } from '@mantine/core';
+import { Modal, Code, CopyButton, Tooltip, ActionIcon, List, AppShell, TextInput, Burger, Group, NavLink, Text as MantineText, Center, Loader, Stack, Title, Paper, Button, Badge, Divider, Container, Table } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCopy, IconCheck, IconTerminal2, IconCpu, IconFlask, IconReceipt } from '@tabler/icons-react';
 import { SubmitForm } from './components/SubmitForm';
@@ -62,7 +62,7 @@ export default function App() {
         <Paper withBorder p="xl" radius="md" shadow="md" w={350}>
           <Stack>
             <Title order={3}>Matcha Private Beta</Title>
-            <Text size="sm" c="dimmed">Enter developer password to access the Kolektif.</Text>
+            <MantineText size="sm" c="dimmed">Enter developer password to access the Kolektif.</MantineText>
             <TextInput 
               type="password" 
               placeholder="Password" 
@@ -148,7 +148,7 @@ export default function App() {
         <Group justify="space-between" mb="xl">
           <Stack gap={0}>
             <Title order={2}>Your Compute Nodes</Title>
-            <Text c="dimmed">Live telemetry from your enrolled devices.</Text>
+            <MantineText c="dimmed">Live telemetry from your enrolled devices.</MantineText>
           </Stack>
           <Button 
             variant="light" 
@@ -162,24 +162,24 @@ export default function App() {
         </Group>
 
         <Modal opened={enrollOpened} onClose={closeEnroll} title="Add New Compute Node" size="lg" radius="md">
-          <Text size="sm" mb="md" c="dimmed">
+          <MantineText size="sm" mb="md" c="dimmed">
             Run these commands on the machine you want to add to the Kolektif.
-          </Text>
+          </MantineText>
 
           <Stack gap="md">
             <Paper withBorder p="xs" bg="gray.0">
-              <Text size="xs" fw={700} mb={5} c="dimmed">1. GET THE AGENT</Text>
+              <MantineText size="xs" fw={700} mb={5} c="dimmed">1. GET THE AGENT</MantineText>
               {/* Updated Git Link */}
               <Code block>git clone https://github.com/ruasnv/matcha-agent.git && cd matcha-agent</Code>
             </Paper>
 
             <Paper withBorder p="xs" bg="gray.0">
-              <Text size="xs" fw={700} mb={5} c="dimmed">2. SETUP ENVIRONMENT</Text>
+              <MantineText size="xs" fw={700} mb={5} c="dimmed">2. SETUP ENVIRONMENT</MantineText>
               <Code block>pip install -r requirements.txt</Code>
             </Paper>
             <Paper withBorder p="xs" bg="dark.7" c="white">
               <Group justify="space-between">
-                <Text size="xs" fw={700}>3. RUN ENROLLMENT</Text>
+                <MantineText size="xs" fw={700}>3. RUN ENROLLMENT</MantineText>
                 <CopyButton value={enrollCommand} timeout={2000}>
                   {({ copied, copy }) => (
                     <ActionIcon color={copied ? 'teal' : 'gray'} onClick={copy}>
@@ -194,7 +194,7 @@ export default function App() {
         </Modal>
 
         <Paper withBorder p="md" radius="md">
-          {devices.length === 0 ? <Center h={100}><Text c="dimmed">No devices enrolled yet.</Text></Center> : (
+          {devices.length === 0 ? <Center h={100}><MantineText c="dimmed">No devices enrolled yet.</MantineText></Center> : (
             <Table>
               <Table.Thead>
                 <Table.Tr>
