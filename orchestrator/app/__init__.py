@@ -30,9 +30,9 @@ def create_app():
 
     # 2. Config Mapping
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-123'),
-        ORCHESTRATOR_API_KEY_PROVIDERS='debug-provider-key',
-        ORCHESTRATOR_API_KEY_CONSUMERS=os.environ.get('ORCHESTRATOR_API_KEY_CONSUMERS', 'debug-consumer-key'),
+        SECRET_KEY=os.environ.get('SECRET_KEY'),
+        ORCHESTRATOR_API_KEY_PROVIDERS=os.environ.get('ORCHESTRATOR_API_KEY_PROVIDERS'),
+        ORCHESTRATOR_API_KEY_CONSUMERS=os.environ.get('ORCHESTRATOR_API_KEY_CONSUMERS'),
         SQLALCHEMY_DATABASE_URI=db_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SQLALCHEMY_ENGINE_OPTIONS={
@@ -68,11 +68,12 @@ def create_app():
             return
 
         # 2. List of paths that DON'T need a key
-        # Note: These are substrings of your URLs
+        # 2. List of paths that DON'T need a key
         public_paths = [
             '/health_check', 
             '/auth/sync',
             '/consumer/upload_project', 
+            '/consumer/submit_task',
             '/consumer/tasks',
             '/provider/my_devices',
             '/auth/generate_enrollment_token'

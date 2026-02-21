@@ -28,18 +28,22 @@ s3_client = boto3.client(
 def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # 1. Get the key from the header
         api_key = request.headers.get('X-API-Key')
         
-        # Get both valid keys from your environment
+        # 2. Get the valid keys from Render Env Vars
+        # We check BOTH potential keys to be safe
         provider_key = os.getenv("ORCHESTRATOR_API_KEY_PROVIDERS")
         consumer_key = os.getenv("ORCHESTRATOR_API_KEY_CONSUMERS")
         
-        # Check if the sent key matches either one
-        if not api_key or (api_key != provider_key and api_key != consumer_key):
-            print(f"DEBUG: Unauthorized access attempt with key: {api_key}")
-            return jsonify({"error": "Unauthorized: Invalid or missing API Key"}), 403 # Changed to 403 to match your error
-            
-        return f(*args, **kwargs)
+        # 3. Logic: If it matches EITHER, let them in.
+        if api_key and (api_key == provider_key or api_key == consumer_key):
+            return f(*args, **kwargs)
+        
+        # 4. If it fails, log it so we can see it in Render Logs
+        print(f"❌ 403 REJECTED: Received '{api_key}', Expected '{consumer_key}'")
+        return jsonify({"error": "Unauthorized"}), 403
+
     return decorated_function
 
 # --- Enrollment Logic ---
