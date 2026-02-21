@@ -105,32 +105,32 @@ def get_my_devices():
 
 @bp.route('/consumer/upload_project', methods=['POST'])
 def upload_project():
-    clerk_id = request.form.get('clerk_id') # Get user ID from form data
-    if not clerk_id:
-        return jsonify({"error": "Unauthorized: Missing clerk_id"}), 401
-
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    
-    file = request.files['file']
-    
-    # ORGANIZED PATH: projects/<user_id>/<uuid>.zip
-    project_id = str(uuid.uuid4())
-    filename = f"projects/{clerk_id}/{project_id}.zip"
-
     try:
-        s3_client.upload_fileobj(file, os.getenv('R2_BUCKET_NAME'), filename)
+        file = request.files.get('file')
+        clerk_id = request.form.get('clerk_id')
         
-        # Presigned URL (Standard HTTPS link for the Provider)
-        download_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': os.getenv('R2_BUCKET_NAME'), 'Key': filename},
-            ExpiresIn=3600 
+        if not file or not clerk_id:
+            return jsonify({"error": "Missing file or user ID"}), 400
+
+        file_name = f"{clerk_id}/{file.filename}"
+        bucket = os.getenv('R2_BUCKET_NAME')
+        
+        # Upload to R2
+        s3_client.upload_fileobj(
+            file,
+            bucket,
+            file_name,
+            ExtraArgs={'ContentType': file.content_type}
         )
+
+        # Generate the public URL
+        public_url = f"{os.getenv('R2_PUBLIC_DOMAIN')}/{file_name}"
         
-        return jsonify({"project_url": download_url}), 200
+        return jsonify({"project_url": public_url}), 200
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"R2 Upload Error: {str(e)}")
+        return jsonify({"error": "Storage configuration error on server"}), 500
 
 # --- Auth Management ---
 

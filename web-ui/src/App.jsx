@@ -14,6 +14,143 @@ import {
 
 // Centralize your API URL so it automatically switches between localhost and Render
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// 1. Update the sub-view to accept 'tasks' as a prop
+const ResearchDashboard = ({ tasks }) => (
+  <Container size="lg" py="md">
+    <Stack gap="xl">
+      <Paper withBorder p="xl" radius="md" shadow="sm">
+        <SubmitForm />
+      </Paper>
+      <Divider my="sm" label="Your Research Tasks" labelPosition="center" />
+      <Paper withBorder p="md" radius="md">
+          {/* Now 'tasks' will actually exist here */}
+          <TaskTable tasks={tasks} />
+      </Paper>
+    </Stack>
+  </Container>
+);
+
+const FleetDashboard = () => {
+  const [devices, setDevices] = useState([]);
+  // Using a specific name for enrollment modal to avoid conflicts
+  const [enrollOpened, { open: openEnroll, close: closeEnroll }] = useDisclosure(false);
+  const [token, setToken] = useState('');
+  const [loadingToken, setLoadingToken] = useState(false);
+
+  useEffect(() => {
+    const fetchDevices = async () => {
+      if (isSignedIn && user) {
+        try {
+          const response = await fetch(`${API_URL}/provider/my_devices?clerk_id=${user.id}`);
+          const data = await response.json();
+          setDevices(Array.isArray(data) ? data : []);
+        } catch (err) {
+          console.error("Failed to fetch devices", err);
+        }
+      }
+    };
+    fetchDevices();
+    const interval = setInterval(fetchDevices, 5000);
+    return () => clearInterval(interval);
+  }, [isSignedIn, user]);
+
+  const handleEnrollClick = async () => {
+    setLoadingToken(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/generate_enrollment_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clerk_id: user.id })
+      });
+      const data = await res.json();
+      setToken(data.token);
+      openEnroll();
+    } catch (err) {
+      console.error("Token generation failed", err);
+    } finally {
+      setLoadingToken(false);
+    }
+  };
+
+  const enrollCommand = `python agent.py --enroll ${token}`;
+
+  return (
+    <Container size="lg" py="md">
+      <Group justify="space-between" mb="xl">
+        <Stack gap={0}>
+          <Title order={2}>Your Compute Nodes</Title>
+          <MantineText c="dimmed">Live telemetry from your enrolled devices.</MantineText>
+        </Stack>
+        <Button 
+          variant="light" 
+          color="green" 
+          leftSection={<IconTerminal2 size={18} />}
+          loading={loadingToken}
+          onClick={handleEnrollClick}
+        >
+          + Enroll New Device
+        </Button>
+      </Group>
+
+      <Modal opened={enrollOpened} onClose={closeEnroll} title="Add New Compute Node" size="lg" radius="md">
+        <MantineText size="sm" mb="md" c="dimmed">
+          Run these commands on the machine you want to add to the Kolektif.
+        </MantineText>
+
+        <Stack gap="md">
+          <Paper withBorder p="xs" bg="gray.0">
+            <MantineText size="xs" fw={700} mb={5} c="dimmed">1. GET THE AGENT</MantineText>
+            {/* Updated Git Link */}
+            <Code block>git clone https://github.com/ruasnv/matcha-agent.git && cd matcha-agent</Code>
+          </Paper>
+
+          <Paper withBorder p="xs" bg="gray.0">
+            <MantineText size="xs" fw={700} mb={5} c="dimmed">2. SETUP ENVIRONMENT</MantineText>
+            <Code block>pip install -r requirements.txt</Code>
+          </Paper>
+          <Paper withBorder p="xs" bg="dark.7" c="white">
+            <Group justify="space-between">
+              <MantineText size="xs" fw={700}>3. RUN ENROLLMENT</MantineText>
+              <CopyButton value={enrollCommand} timeout={2000}>
+                {({ copied, copy }) => (
+                  <ActionIcon color={copied ? 'teal' : 'gray'} onClick={copy}>
+                    {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                  </ActionIcon>
+                )}
+              </CopyButton>
+            </Group>
+            <Code block color="dark.6" c="green.4">{enrollCommand}</Code>
+          </Paper>
+        </Stack>
+      </Modal>
+
+      <Paper withBorder p="md" radius="md">
+        {devices.length === 0 ? <Center h={100}><MantineText c="dimmed">No devices enrolled yet.</MantineText></Center> : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Device Name</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>CPU</Table.Th>
+                <Table.Th>GPU</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {devices.map((device) => (
+                <Table.Tr key={device.id}>
+                  <Table.Td>{device.name || device.id}</Table.Td>
+                  <Table.Td><Badge color="green">{device.status}</Badge></Table.Td>
+                  <Table.Td>{device.telemetry?.cpu_load}%</Table.Td>
+                  <Table.Td>{device.telemetry?.gpu?.name || "None"}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Paper>
+    </Container>
+  );
+};
 
 export default function App() {
   // 1. ALL HOOKS MUST GO HERE AT THE TOP (Unconditionally)
@@ -83,144 +220,6 @@ export default function App() {
       </Center>
     );
   }
-
-  // --- SUB-VIEWS (Defined as functions or simple constants) ---
-  const ResearchDashboard = () => (
-    <Container size="lg" py="md">
-      <Stack gap="xl">
-        <Paper withBorder p="xl" radius="md" shadow="sm">
-          <SubmitForm />
-        </Paper>
-        <Divider my="sm" label="Your Research Tasks" labelPosition="center" />
-        <Paper withBorder p="md" radius="md">
-           <TaskTable tasks={tasks} />
-        </Paper>
-      </Stack>
-    </Container>
-  );
-
-  const FleetDashboard = () => {
-    const [devices, setDevices] = useState([]);
-    // Using a specific name for enrollment modal to avoid conflicts
-    const [enrollOpened, { open: openEnroll, close: closeEnroll }] = useDisclosure(false);
-    const [token, setToken] = useState('');
-    const [loadingToken, setLoadingToken] = useState(false);
-
-    useEffect(() => {
-      const fetchDevices = async () => {
-        if (isSignedIn && user) {
-          try {
-            const response = await fetch(`${API_URL}/provider/my_devices?clerk_id=${user.id}`);
-            const data = await response.json();
-            setDevices(Array.isArray(data) ? data : []);
-          } catch (err) {
-            console.error("Failed to fetch devices", err);
-          }
-        }
-      };
-      fetchDevices();
-      const interval = setInterval(fetchDevices, 5000);
-      return () => clearInterval(interval);
-    }, [isSignedIn, user]);
-
-    const handleEnrollClick = async () => {
-      setLoadingToken(true);
-      try {
-        const res = await fetch(`${API_URL}/auth/generate_enrollment_token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clerk_id: user.id })
-        });
-        const data = await res.json();
-        setToken(data.token);
-        openEnroll();
-      } catch (err) {
-        console.error("Token generation failed", err);
-      } finally {
-        setLoadingToken(false);
-      }
-    };
-
-    const enrollCommand = `python agent.py --enroll ${token}`;
-
-    return (
-      <Container size="lg" py="md">
-        <Group justify="space-between" mb="xl">
-          <Stack gap={0}>
-            <Title order={2}>Your Compute Nodes</Title>
-            <MantineText c="dimmed">Live telemetry from your enrolled devices.</MantineText>
-          </Stack>
-          <Button 
-            variant="light" 
-            color="green" 
-            leftSection={<IconTerminal2 size={18} />}
-            loading={loadingToken}
-            onClick={handleEnrollClick}
-          >
-            + Enroll New Device
-          </Button>
-        </Group>
-
-        <Modal opened={enrollOpened} onClose={closeEnroll} title="Add New Compute Node" size="lg" radius="md">
-          <MantineText size="sm" mb="md" c="dimmed">
-            Run these commands on the machine you want to add to the Kolektif.
-          </MantineText>
-
-          <Stack gap="md">
-            <Paper withBorder p="xs" bg="gray.0">
-              <MantineText size="xs" fw={700} mb={5} c="dimmed">1. GET THE AGENT</MantineText>
-              {/* Updated Git Link */}
-              <Code block>git clone https://github.com/ruasnv/matcha-agent.git && cd matcha-agent</Code>
-            </Paper>
-
-            <Paper withBorder p="xs" bg="gray.0">
-              <MantineText size="xs" fw={700} mb={5} c="dimmed">2. SETUP ENVIRONMENT</MantineText>
-              <Code block>pip install -r requirements.txt</Code>
-            </Paper>
-            <Paper withBorder p="xs" bg="dark.7" c="white">
-              <Group justify="space-between">
-                <MantineText size="xs" fw={700}>3. RUN ENROLLMENT</MantineText>
-                <CopyButton value={enrollCommand} timeout={2000}>
-                  {({ copied, copy }) => (
-                    <ActionIcon color={copied ? 'teal' : 'gray'} onClick={copy}>
-                      {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                    </ActionIcon>
-                  )}
-                </CopyButton>
-              </Group>
-              <Code block color="dark.6" c="green.4">{enrollCommand}</Code>
-            </Paper>
-          </Stack>
-        </Modal>
-
-        <Paper withBorder p="md" radius="md">
-          {devices.length === 0 ? <Center h={100}><MantineText c="dimmed">No devices enrolled yet.</MantineText></Center> : (
-            <Table>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Device Name</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th>CPU</Table.Th>
-                  <Table.Th>GPU</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {devices.map((device) => (
-                  <Table.Tr key={device.id}>
-                    <Table.Td>{device.name || device.id}</Table.Td>
-                    <Table.Td><Badge color="green">{device.status}</Badge></Table.Td>
-                    <Table.Td>{device.telemetry?.cpu_load}%</Table.Td>
-                    <Table.Td>{device.telemetry?.gpu?.name || "None"}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Paper>
-      </Container>
-    );
-  };
-
   // 4. THE MAIN LAYOUT
   return (
     <>
@@ -254,10 +253,11 @@ export default function App() {
             <NavLink label="Fleet" leftSection={<IconCpu size="1.2rem" />} active={activePage === 'fleet'} onClick={() => setActivePage('fleet')} />
           </AppShell.Navbar>
 
-          <AppShell.Main bg="#f8f9fa">
-            {activePage === 'dashboard' && <ResearchDashboard />}
-            {activePage === 'fleet' && <FleetDashboard />}
-          </AppShell.Main>
+         <AppShell.Main bg="#f8f9fa">
+          {/* 2. Pass the state down to the component here */}
+          {activePage === 'dashboard' && <ResearchDashboard tasks={tasks} />}
+          {activePage === 'fleet' && <FleetDashboard />}
+        </AppShell.Main>
         </AppShell>
       </SignedIn>
     </>

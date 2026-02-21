@@ -70,23 +70,26 @@ export function SubmitForm() {
     }
   };
 
-  return (
-    <Paper withBorder p="xl" radius="md" shadow="sm">
+ return (
+    <Paper withBorder p="xl" radius="md" shadow="sm" key="permanent-submit-form">
       <Stack>
         <Title order={4}>Deploy Research Code</Title>
         
-        <MantineText size="xs" c={file ? "green" : "red"} fw={700}>
-          {file ? `✅ READY: ${file.name}` : "❌ NO FILE SELECTED"}
-        </MantineText>
+        {/* We use a simple Badge that won't trigger heavy re-paints */}
+        <Group justify="space-between">
+            <MantineText size="xs" fw={700} c={file ? "green" : "dimmed"}>
+              {file ? `📦 ${file.name} ready` : "📎 No file selected"}
+            </MantineText>
+            {file && <Button variant="subtle" color="red" size="compact-xs" onClick={() => setFile(null)}>Clear</Button>}
+        </Group>
 
         <FileInput 
           label="Research Script or ZIP" 
-          placeholder="Click to browse" 
+          placeholder="Select .py or .zip" 
           value={file} 
-          onChange={(payload) => {
-            setFile(payload);
-          }} 
+          onChange={setFile} 
           required
+          accept=".py,.zip"
         />
         
         <TextInput 
@@ -100,10 +103,10 @@ export function SubmitForm() {
             loading={uploading} 
             fullWidth 
             color="green"
-            // We force it enabled if the console saw the file earlier
-            variant="filled"
+            // If the state is flickering, this condition will catch it
+            disabled={!file}
         >
-          Zip & Run on Network
+          {file ? "Zip & Run on Network" : "Please Select File"}
         </Button>
       </Stack>
     </Paper>
