@@ -29,9 +29,16 @@ def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         api_key = request.headers.get('X-API-Key')
-        expected_key = os.getenv("ORCHESTRATOR_API_KEY", "debug-provider-key")
-        if not api_key or api_key != expected_key:
-            return jsonify({"error": "Unauthorized: Invalid or missing API Key"}), 401
+        
+        # Get both valid keys from your environment
+        provider_key = os.getenv("ORCHESTRATOR_API_KEY_PROVIDERS")
+        consumer_key = os.getenv("ORCHESTRATOR_API_KEY_CONSUMERS")
+        
+        # Check if the sent key matches either one
+        if not api_key or (api_key != provider_key and api_key != consumer_key):
+            print(f"DEBUG: Unauthorized access attempt with key: {api_key}")
+            return jsonify({"error": "Unauthorized: Invalid or missing API Key"}), 403 # Changed to 403 to match your error
+            
         return f(*args, **kwargs)
     return decorated_function
 
@@ -64,8 +71,6 @@ def enroll_provider():
     data = request.json
     token_str = data.get('token', '').upper()
     provider_id = data.get('provider_id')
-    
-    # 👈 Fixed: Changed FALSE to False
     token_entry = EnrollmentToken.query.filter_by(token=token_str, is_used=False).first()
     
     if not token_entry or datetime.utcnow() > token_entry.expires_at:
@@ -261,6 +266,7 @@ def agent_task_update():
 
 # --- Consumer Management ---
 @bp.route('/consumer/submit_task', methods=['POST'])
+@require_api_key
 def consumer_submit_task():
     data = request.get_json()
     clerk_id = data.get('clerk_id') # Use clerk_id consistently
