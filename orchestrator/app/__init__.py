@@ -23,10 +23,10 @@ def create_app():
     if db_url:
         if db_url.startswith("postgres://"):
             db_url = db_url.replace("postgres://", "postgresql://", 1)
-        print("🌐 Using Cloud Postgres (Neon/Render)")
+        print("Using Cloud Postgres (Neon/Render)")
     else:
         db_url = "sqlite:///matcha.db"
-        print("⚠️ No DATABASE_URL found. Using local SQLite.")
+        print("No DATABASE_URL found. Using local SQLite.")
 
     # 2. Config Mapping
     app.config.from_mapping(

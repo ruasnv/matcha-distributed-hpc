@@ -3,7 +3,6 @@ FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-# --- FIX ---
 # Copy the requirements file from its sub-folder
 COPY orchestrator/requirements.txt .
 

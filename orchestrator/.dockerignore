@@ -8,3 +8,5 @@ __pycache__/
 # Ignore VS Code and Git files
 .vscode/
 .git/
+
+.env

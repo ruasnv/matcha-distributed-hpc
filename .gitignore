@@ -18,4 +18,3 @@ instance/
 .vscode/
 .idea/.env
 __pycache__/
-venv/

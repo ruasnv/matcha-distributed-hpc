@@ -32,7 +32,7 @@ def require_api_key(f):
         api_key = request.headers.get('X-API-Key')
         
         # 2. Get the valid keys from Render Env Vars
-        # We check BOTH potential keys to be safe
+        # We check both potential keys to be safe
         provider_key = os.getenv("ORCHESTRATOR_API_KEY_PROVIDERS")
         consumer_key = os.getenv("ORCHESTRATOR_API_KEY_CONSUMERS")
         
@@ -41,7 +41,7 @@ def require_api_key(f):
             return f(*args, **kwargs)
         
         # 4. If it fails, log it so we can see it in Render Logs
-        print(f"❌ 403 REJECTED: Received '{api_key}', Expected '{consumer_key}'")
+        print(f"403 REJECTED: Received '{api_key}', Expected '{consumer_key}'")
         return jsonify({"error": "Unauthorized"}), 403
 
     return decorated_function
@@ -143,7 +143,7 @@ def upload_project():
 
 # --- Auth Management ---
 
-@bp.route('/auth/sync', methods=['POST']) # Use @bp.route and add 'methods' (plural)
+@bp.route('/auth/sync', methods=['POST'])
 def sync_user():
     data = request.json
     clerk_id = data.get('clerk_id')
@@ -177,7 +177,7 @@ def provider_register():
     # hardware_specs contains the dictionary from get_telemetry()
     specs = data.get('hardware_specs', {}) 
     
-    # IMPORTANT: The agent now sends a list of GPUs separately
+    # The agent sends a list of GPUs separately
     # We should prioritize that list if it exists
     detected_gpus = data.get('gpus', [])
     
@@ -319,7 +319,7 @@ def get_user_tasks():
     if not clerk_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    # 1. OPTIMIZED CLEANUP: Only run if it's been more than 5 minutes
+    # 1. Only run if it's been more than 5 minutes
     now = datetime.utcnow()
     if (now - LAST_CLEANUP_TIME).total_seconds() > 300: # 300 seconds = 5 minutes
         stale_limit = now - timedelta(minutes=10)
@@ -345,7 +345,7 @@ def get_user_tasks():
         
         LAST_CLEANUP_TIME = now # Reset the timer
 
-    # 2. FAST FETCH: Just get the user's tasks
+    # 2. Get the user's tasks
     user_tasks = Task.query.filter_by(user_id=clerk_id).order_by(Task.submission_time.desc()).all()
     
     return jsonify([{
@@ -356,12 +356,13 @@ def get_user_tasks():
         "submission_time": t.submission_time.isoformat() if t.submission_time else None
     } for t in user_tasks]), 200
 
-# --- NEW ENDPOINT FOR PROVIDERS ---
-
+# --- PROVIDERS ---
 @bp.route('/provider/get_task', methods=['POST'])
+@require_api_key
 def provider_get_task():
     data = request.get_json()
     provider_id = data.get('provider_id')
+    
     if not provider_id:
         return jsonify({"error": "Missing provider_id"}), 400
 
@@ -369,56 +370,66 @@ def provider_get_task():
     if not provider:
         return jsonify({"error": "Provider not registered."}), 404
 
-    # 1. Update heartbeat for this provider
+    # 1. Update heartbeat
     provider.last_seen = datetime.utcnow()
     provider.status = 'active'
     
-    # 2. Find an idle GPU on this provider
+    # 2. Check for an idle GPU
     provider_gpus = jsonpickle.decode(provider.gpus)
-    idle_gpu = None
-    idle_gpu_index = -1
-    for i, gpu in enumerate(provider_gpus):
-        if gpu.get('status', 'idle') == 'idle':
-            idle_gpu = gpu
-            idle_gpu_index = i
-            break
+    idle_gpu = next((gpu for gpu in provider_gpus if gpu.get('status') == 'idle'), None)
     
-    # If no idle GPUs on this provider, just return
     if not idle_gpu:
         db.session.commit()
         return jsonify({"task": None, "message": "Heartbeat received. No idle GPUs."}), 200
 
-    # 3. Find a queued task
+    # 3. Find the oldest queued task
     task = Task.query.filter_by(status='QUEUED').order_by(Task.submission_time).first()
     
-    # If no queued tasks, just return
     if not task:
         db.session.commit()
         return jsonify({"task": None, "message": "Heartbeat received. No queued tasks."}), 200
 
-    # 4. WE HAVE A MATCH! Assign task to provider's GPU
+    # 4. Generate a temporary "Ticket" for the Agent to upload results
+    # The agent uses this URL to put its results directly to R2 without needing api keys.
+    try:
+        upload_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': os.getenv('R2_BUCKET_NAME'),
+                'Key': f"artifacts/{task.id}.zip",
+                'ContentType': 'application/zip'
+            },
+            ExpiresIn=3600  # Link valid for 1 hour
+        )
+    except Exception as e:
+        print(f"Failed to generate presigned URL: {e}")
+        return jsonify({"error": "Internal storage error"}), 500
+
+    # 5. Assign task and mark GPU as busy
     task.provider_id = provider_id
     task.gpu_assigned = jsonpickle.encode(idle_gpu, unpicklable=False)
     task.status = 'RUNNING'
     task.start_time = datetime.utcnow()
     
-    # Mark the GPU as busy
-    provider_gpus[idle_gpu_index]['status'] = 'busy'
+    # Update GPU status in the provider's list
+    for gpu in provider_gpus:
+        if gpu['id'] == idle_gpu['id']:
+            gpu['status'] = 'busy'
+            break
+            
     provider.gpus = jsonpickle.encode(provider_gpus, unpicklable=False)
     
     try:
         db.session.commit()
-        print(f"Task {task.id} assigned to provider {provider_id} on GPU {idle_gpu['id']}")
-        # Return the task to the provider
+        print(f"Task {task.id} assigned to {provider_id} on {idle_gpu['name']}")
+        
         return jsonify({
             "task": {
                 "task_id": task.id,
                 "docker_image": task.docker_image,
                 "gpu_id": idle_gpu['id'],
-
-                # --- ADD THESE NEW FIELDS ---
-                "input_path": task.input_path,
-                "output_path": task.output_path,
+                "input_path": task.input_path,    # The download link for the code
+                "upload_url": upload_url,          # THE TICKET: The secure upload link
                 "script_path": task.script_path,
                 "env_vars": json.loads(task.env_vars) if task.env_vars else {}
             },
@@ -426,7 +437,7 @@ def provider_get_task():
         }), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"DB error assigning task: {e}"}), 500
+        return jsonify({"error": f"Database error: {e}"}), 500
 
 
 # --- Other Endpoints (Health, Debug) ---

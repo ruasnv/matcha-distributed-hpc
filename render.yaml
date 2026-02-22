@@ -13,9 +13,6 @@ services:
     # Tell Render where the Dockerfile is
     dockerfilePath: ./orchestrator/Dockerfile
     
-    # --- WE REMOVED startCommand and PYTHON_COMMAND ---
-    # The start command now comes from the CMD in the Dockerfile
-    
     # Set the environment variables
     envVars:
       - key: DATABASE_URL

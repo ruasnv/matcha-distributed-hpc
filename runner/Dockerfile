@@ -14,7 +14,6 @@ RUN pip install --no-cache-dir \
     numpy \
     pandas \
     scipy \
-    transformers \
     requests \
     tqdm
 
