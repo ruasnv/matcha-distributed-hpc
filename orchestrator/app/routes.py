@@ -270,7 +270,6 @@ def agent_task_update():
 
 # --- Consumer Management ---
 @bp.route('/consumer/submit_task', methods=['POST'])
-@require_api_key
 def consumer_submit_task():
     data = request.get_json()
     clerk_id = data.get('clerk_id') # Use clerk_id consistently
@@ -282,7 +281,7 @@ def consumer_submit_task():
     new_task = Task(
         id=task_id,
         user_id=clerk_id, # Link task to the authenticated user
-        docker_image=data.get('docker_image', 'matcha-runner:latest'),
+        docker_image=data.get('docker_image', 'ruasnv/matcha-runner:latest'),
         status='QUEUED',
         submission_time=datetime.utcnow(),
         input_path=data.get('input_path'), # This is the Presigned R2 URL

@@ -1,13 +1,16 @@
 #!/bin/bash
-# Exit immediately if a command exits with a non-zero status
 set -e
 
-echo "Downloading project from R2..."
-# FIX: Wrap the URL in double quotes to handle '&' and '?'
+echo "📥 Downloading project..."
 curl -L "$PROJECT_URL" -o project.zip
-
-echo "Unzipping research code..."
 unzip -o project.zip
 
-echo "Starting Python execution: ${SCRIPT_PATH:-main.py}"
+# 🚀 THE SMART LOGIC:
+# If the user included a requirements.txt, install those libraries on the fly!
+if [ -f "requirements.txt" ]; then
+    echo "📦 Found requirements.txt. Installing custom dependencies..."
+    pip install --no-cache-dir -r requirements.txt
+fi
+
+echo "🚀 Starting Python execution: ${SCRIPT_PATH:-main.py}"
 python3 "${SCRIPT_PATH:-main.py}"
