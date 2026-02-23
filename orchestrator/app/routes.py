@@ -88,6 +88,30 @@ def enroll_provider():
         "message": "Enrollment successful"
     }), 200
 
+@bp.route('/consumer/download_results/<task_id>', methods=['GET'])
+@require_api_key # Keep it secure!
+def download_results(task_id):
+    task = Task.query.get(task_id)
+    if not task or task.status != 'COMPLETED':
+        return jsonify({"error": "Results not ready or task not found"}), 404
+
+    # Ensure this matches the upload path used by the agent!
+    object_key = f"{task.user_id}/results_{task_id}.zip"
+
+    try:
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': os.getenv('R2_BUCKET_NAME'),
+                'Key': object_key
+            },
+            ExpiresIn=3600 # 1-hour
+        )
+        return jsonify({"download_url": url}), 200
+    except Exception as e:
+        print(f"R2 Error: {e}")
+        return jsonify({"error": "Could not generate download link"}), 500
+    
 @bp.route('/provider/my_devices', methods=['GET'])
 def get_my_devices():
     clerk_id = request.args.get('clerk_id')
@@ -354,6 +378,8 @@ def get_user_tasks():
         "result_url": t.result_url,
         "submission_time": t.submission_time.isoformat() if t.submission_time else None
     } for t in user_tasks]), 200
+
+
 
 # --- PROVIDERS ---
 @bp.route('/provider/get_task', methods=['POST'])

@@ -76,6 +76,7 @@ def create_app():
             '/consumer/submit_task',
             '/consumer/tasks',
             '/provider/my_devices',
+            '/consumer/download_results/',
             '/auth/generate_enrollment_token'
         ]
 
