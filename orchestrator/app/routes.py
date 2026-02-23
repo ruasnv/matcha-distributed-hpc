@@ -96,7 +96,7 @@ def download_results(task_id):
         return jsonify({"error": "Results not ready or task not found"}), 404
 
     # Ensure this matches the upload path used by the agent!
-    object_key = f"{task.user_id}/results_{task_id}.zip"
+    object_key = f"artifacts/{task_id}.zip"
 
     try:
         url = s3_client.generate_presigned_url(
@@ -124,13 +124,30 @@ def get_my_devices():
         # Fetch devices linked to this Clerk ID
         devices = Provider.query.filter_by(user_id=clerk_id).all()
         
-        return jsonify([{
-            "id": d.id,
-            "name": d.name,
-            "status": d.status,
-            "last_seen": d.last_seen.isoformat() if d.last_seen else None,
-            "telemetry": d.last_telemetry 
-        } for d in devices]), 200
+        now = datetime.utcnow()
+        OFFLINE_THRESHOLD = 30  # seconds before we consider it dead
+
+        formatted_devices = []
+        for d in devices:
+            # DYNAMIC STATUS LOGIC:
+            # If the device hasn't checked in recently, it's 'offline' 
+            # regardless of what the status column says.
+            is_active = False
+            if d.last_seen:
+                seconds_since_seen = (now - d.last_seen).total_seconds()
+                is_active = seconds_since_seen < OFFLINE_THRESHOLD
+
+            current_status = 'active' if is_active else 'offline'
+
+            formatted_devices.append({
+                "id": d.id,
+                "name": d.name,
+                "status": current_status, # Overriding with our dynamic check
+                "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+                "telemetry": d.last_telemetry 
+            })
+        
+        return jsonify(formatted_devices), 200
         
     except Exception as e:
         print(f"DEBUG: Database error in my_devices: {e}")

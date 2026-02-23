@@ -1,2 +1,0 @@
-requests
-click # For building the CLI
