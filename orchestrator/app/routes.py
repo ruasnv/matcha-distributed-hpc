@@ -9,7 +9,7 @@ import boto3
 from botocore.config import Config
 from functools import wraps
 from .models import db, Provider, Task, User, EnrollmentToken
-from ledger_service import record_on_chain
+from .ledger_service import record_on_chain
 
 bp = Blueprint('api', __name__, url_prefix='/')
 LAST_CLEANUP_TIME = datetime.utcnow()
