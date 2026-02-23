@@ -46,8 +46,6 @@ services:
         condition: service_healthy
               
     environment:
-      - PYTHONUNBUFFERED=1
-      - PROVIDER_ID=matcha_gpu_node_1
-      - HEARTBEAT_INTERVAL_SECONDS=5
-      - ORCHESTRATOR_URL=http://orchestrator:5000
-      - API_KEY=supersecretproviderkey123
+    - DATABASE_URL=postgresql://... # Your Neon URL
+    - ORCHESTRATOR_API_KEY_PROVIDERS=matcha-beta-2026
+    - ORCHESTRATOR_API_KEY_CONSUMERS=ultrasecretconsumerkey456

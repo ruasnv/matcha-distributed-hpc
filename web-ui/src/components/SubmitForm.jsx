@@ -53,7 +53,7 @@ export function SubmitForm() {
         body: JSON.stringify({
           clerk_id: user?.id,
           input_path: project_url,
-          docker_image: 'runner:latest',
+          docker_image: 'ruasnv/matcha-runner:latest',
           script_path: entryPoint 
         })
       });
