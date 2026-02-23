@@ -43,8 +43,8 @@ def record_on_chain(task_id, status):
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         
-        print(f"🔗 Blockchain Audit Logged: {w3.to_hex(tx_hash)}")
+        print(f"Blockchain Audit Logged: {w3.to_hex(tx_hash)}")
         return w3.to_hex(tx_hash)
     except Exception as e:
-        print(f"⚠️ Blockchain Logging Failed: {e}")
+        print(f"Blockchain Logging Failed: {e}")
         return None

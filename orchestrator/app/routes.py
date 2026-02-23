@@ -9,6 +9,7 @@ import boto3
 from botocore.config import Config
 from functools import wraps
 from .models import db, Provider, Task, User, EnrollmentToken
+from ledger_service import record_on_chain
 
 bp = Blueprint('api', __name__, url_prefix='/')
 LAST_CLEANUP_TIME = datetime.utcnow()
@@ -279,12 +280,16 @@ def agent_task_update():
     # Check if result_url was sent in the 'details' dict
     if 'result_url' in details:
         task.result_url = details['result_url']
-        print(f"DEBUG: Received Result URL for task {task_id}") # Add this to debug!
+        print(f"DEBUG: Received Result URL for task {task_id}")
     if status in ['COMPLETED', 'FAILED', 'CANCELLED']:
         task.end_time = datetime.utcnow()
     
     try:
         db.session.commit()
+        # BLOCKCHAIN LOG: Task Status Update (Completed/Failed)
+        # We log the final outcome to the ledger
+        if status in ['COMPLETED', 'FAILED']:
+            record_on_chain(task_id, status)
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"DB error updating task: {e}"}), 500
@@ -332,6 +337,7 @@ def consumer_submit_task():
     
     db.session.add(new_task)
     db.session.commit()
+    record_on_chain(task_id, "QUEUED")
     return jsonify({"task_id": task_id, "message": "Task submitted."}), 200
 
 @bp.route('/consumer/task_status/<task_id>', methods=['GET'])
@@ -464,19 +470,25 @@ def provider_get_task():
     try:
         db.session.commit()
         print(f"Task {task.id} assigned to {provider_id} on {idle_gpu['name']}")
+        try:
+            # We log that the task is now RUNNING and which provider took it
+            record_on_chain(task.id, f"RUNNING on {provider_id}")
+        except Exception as bce:
+            print(f"Blockchain audit failed but continuing: {bce}")
         
         return jsonify({
             "task": {
                 "task_id": task.id,
                 "docker_image": task.docker_image,
                 "gpu_id": idle_gpu['id'],
-                "input_path": task.input_path,    # The download link for the code
-                "upload_url": upload_url,          # THE TICKET: The secure upload link
+                "input_path": task.input_path,
+                "upload_url": upload_url,
                 "script_path": task.script_path,
                 "env_vars": json.loads(task.env_vars) if task.env_vars else {}
             },
             "message": "Task assigned."
         }), 200
+        
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Database error: {e}"}), 500
