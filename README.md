@@ -192,7 +192,7 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 ### Running a Provider Agent
 
-Providers need Docker Desktop installed. The provider agent handles everything else automatically — it detects available GPUs, registers with the orchestrator, and begins polling for tasks.
+Providers need Docker Desktop installed. The provider agent handles everything else automatically; it detects available GPUs, registers with the orchestrator, and begins polling for tasks.
 
 ```bash
 # Coming soon: one-line provider setup
@@ -204,9 +204,9 @@ Providers need Docker Desktop installed. The provider agent handles everything e
 
 Kolektif is not a replacement for a proper HPC cluster. It was not designed to be.
 
-The current task queue is strictly FIFO with no parallelism across providers — if multiple providers are online simultaneously, they do not yet operate as a true worker pool. The system has no fault tolerance if a provider disconnects mid-task. And provider onboarding requires Docker Desktop, which creates friction for non-technical contributors.
+The current task queue is strictly FIFO with no parallelism across providers; if multiple providers are online simultaneously, they do not yet operate as a true worker pool. The system has no fault tolerance if a provider disconnects mid-task. And provider onboarding requires Docker Desktop, which creates friction for non-technical contributors.
 
-These are known limitations and represent the primary directions for future work, not fundamental flaws in the architecture. The core design — pull-based orchestration, containerized execution, credential-free storage, blockchain provenance — is sound and scales.
+These are known limitations and represent the primary directions for future work, not fundamental flaws in the architecture. The core design (pull-based orchestration, containerized execution, credential-free storage, blockchain provenance) is sound and scales.
 
 ---
 
@@ -229,5 +229,4 @@ Supervised by Prof. Enis Karaarslan.
 ---
 
 ## License
-
-To be determined.
+Protected under MIT Licence.
